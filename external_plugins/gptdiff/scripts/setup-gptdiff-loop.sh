@@ -118,8 +118,8 @@ if ! [[ "$MAX_ITERATIONS" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-if ! command -v gptdiff >/dev/null 2>&1; then
-  echo "❌ Error: 'gptdiff' not found on PATH. Install with: pip install gptdiff" >&2
+if ! python3 -c "import gptdiff" 2>/dev/null; then
+  echo "❌ Error: 'gptdiff' Python package not found. Install with: pip install gptdiff" >&2
   exit 1
 fi
 

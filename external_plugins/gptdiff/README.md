@@ -2,7 +2,7 @@
 
 This plugin is for **iterating** with GPTDiff — not doing a task once, but doing it *many times* to converge on a better result.
 
-It’s intentionally modeled after the **Ralph Wiggum** example plugin’s “loop-in-session” behavior, but instead of making the assistant implement everything directly, it drives **`gptdiff --apply`** repeatedly against a **single focused directory**.
+It's intentionally modeled after the **Ralph Wiggum** example plugin's "loop-in-session" behavior, but instead of making the assistant implement everything directly, it drives **gptdiff's Python API** repeatedly against a **single focused directory**.
 
 ## What you get
 
@@ -15,7 +15,7 @@ When you start a loop with `/gptdiff-loop`:
 2. A **Stop hook** runs the agent loop:
    - Runs optional `--eval-cmd` (signals/metrics/logs)
    - Runs optional `--cmd` (a hard gate; stops when it passes)
-   - Calls `gptdiff --apply` with your goal
+   - Uses gptdiff's Python API (`generate_diff` + `smartapply`) with your goal
    - Repeats until `--max-iterations` is reached (or `--cmd` succeeds)
 
 This pattern is ideal for “make it better” loops (fun/balance/variety/polish) where you want iterative refinement, not a single-shot answer.
@@ -77,7 +77,7 @@ Each loop is the same mechanism — just a different goal prompt and (optionally
 ## Commands
 
 - `/gptdiff-scaffold` — create `.gptignore` + interface files in a target directory
-- `/gptdiff-loop` — start a loop that repeatedly calls `gptdiff --apply`
+- `/gptdiff-loop` — start a loop that repeatedly runs gptdiff via Python API
 - `/cancel-gptdiff-loop` — stop the current loop (removes state file)
 - `/gptdiff-help` — explanation and examples
 

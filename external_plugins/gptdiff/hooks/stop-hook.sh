@@ -32,11 +32,15 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
 
-if ! command -v gptdiff >/dev/null 2>&1; then
-  echo "⚠️  GPTDiff loop: 'gptdiff' not found on PATH. Install with: pip install gptdiff" >&2
+# Check that Python and gptdiff package are available
+if ! python3 -c "import gptdiff" 2>/dev/null; then
+  echo "⚠️  GPTDiff loop: 'gptdiff' Python package not found. Install with: pip install gptdiff" >&2
   rm -f "$STATE_FILE"
   exit 0
 fi
+
+# Get the plugin hooks directory (where this script and gptdiff_apply.py live)
+PLUGIN_HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Parse YAML frontmatter (YAML between --- markers)
 FRONTMATTER="$(sed -n '/^---$/,/^---$/{ /^---$/d; p; }' "$STATE_FILE")"
@@ -221,15 +225,15 @@ append_header "$GPTDIFF_LOG" "GPTDIFF"
   echo "----- gptdiff output -----"
 } >> "$GPTDIFF_LOG"
 
-# Run gptdiff within the target directory (keeps diffs scoped; uses that dir's .gptignore)
+# Run gptdiff using Python API (keeps diffs scoped; uses that dir's .gptignore)
 GPTDIFF_EXIT=0
 set +e
 (
   cd "$TARGET_ABS" || exit 127
   if [[ -n "$MODEL" ]]; then
-    gptdiff "$GPTDIFF_PROMPT" --model "$MODEL" --apply --nobeep
+    python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" --model "$MODEL" --verbose "$GPTDIFF_PROMPT"
   else
-    gptdiff "$GPTDIFF_PROMPT" --apply --nobeep
+    python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" --verbose "$GPTDIFF_PROMPT"
   fi
 ) >> "$GPTDIFF_LOG" 2>&1
 GPTDIFF_EXIT=$?
