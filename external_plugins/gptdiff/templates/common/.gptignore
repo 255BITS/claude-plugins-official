@@ -1,0 +1,69 @@
+# GPTDiff ignore file
+# Purpose: keep prompts lean by excluding large assets + build outputs.
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.venv/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+dist/
+build/
+.next/
+
+# Rust / Go
+target/
+
+# Large assets (common game formats)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+*.tga
+*.psd
+*.ase
+*.aseprite
+*.wav
+*.mp3
+*.ogg
+*.flac
+*.mp4
+*.mov
+*.mkv
+*.fbx
+*.obj
+*.gltf
+*.glb
+*.blend
+*.unitypackage
+
+# Archives / binaries
+*.zip
+*.7z
+*.tar
+*.gz
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Claude / tooling state
+.claude/
+.cache/

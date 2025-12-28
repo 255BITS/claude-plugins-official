@@ -1,0 +1,8 @@
+{
+  "name": "gptdiff",
+  "description": "GPTDiff agent loops for Claude Code: scaffold a focused subdirectory (with .gptignore + interface) and iterate improvements via repeated gptdiff --apply runs.",
+  "author": {
+    "name": "255labs",
+    "email": "support@255labs.xyz"
+  }
+}

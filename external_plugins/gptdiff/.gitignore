@@ -1,0 +1,2 @@
+# keep plugin repo clean when testing locally
+.claude/
