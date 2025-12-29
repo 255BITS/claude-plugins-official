@@ -457,6 +457,10 @@ $GOAL
 3. **Make ONE coherent improvement** - keep changes small and reviewable
 4. **Use Edit tool** to apply your changes directly to the files
 5. **Preserve** existing structure and intent; avoid unnecessary rewrites
+6. **Between iterations, you may run commands** based on the current state:
+   - Commit changes: \`git add . && git commit -m "..."\`
+   - Run tests or linters to verify your changes
+   - Any other commands that help maintain quality
 
 ### Files in scope (respecting .gptignore)
 \`\`\`
