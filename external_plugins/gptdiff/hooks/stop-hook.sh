@@ -4,7 +4,7 @@
 #
 # Implements an in-session agent loop that:
 #   - runs optional eval command (signals/metrics)
-#   - runs optional hard-gate command (stop when it passes)
+#   - runs optional verification command (for feedback, does not gate)
 #   - makes improvements via LLM (external or Claude Code)
 #
 # The loop is activated by /gptdiff-loop which creates:
@@ -162,7 +162,7 @@ if [[ -n "$EVAL_CMD" ]]; then
   echo "" >> "$EVAL_LOG"
 fi
 
-# Optional hard gate command (stop when it passes)
+# Optional command (runs each iteration for verification/feedback, does NOT gate)
 CMD_EXIT=0
 if [[ -n "$CMD" ]]; then
   append_header "$CMD_LOG" "CMD"
@@ -174,12 +174,7 @@ if [[ -n "$CMD" ]]; then
   CMD_EXIT=$?
   set -e
   echo "" >> "$CMD_LOG"
-
-  if [[ $CMD_EXIT -eq 0 ]]; then
-    echo "✅ GPTDiff loop: Hard gate command succeeded. Stopping loop." >&2
-    rm -f "$STATE_FILE"
-    exit 0
-  fi
+  # Command output is used as feedback signal, but does NOT stop the loop
 fi
 
 # Build the goal prompt with eval/cmd signals

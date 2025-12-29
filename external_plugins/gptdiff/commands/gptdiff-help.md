@@ -9,7 +9,7 @@ This plugin is built to showcase **agent loops** powered by **GPTDiff**:
 - Pick a **target directory** (e.g. `items/`)
 - Give a **goal**
 - Iterate N times
-- Optionally run an **evaluator** or **hard gate command**
+- Optionally run an **evaluator** or **verification command**
 - Review the final diffs
 
 It’s “Ralph-style looping” but the work engine is **`gptdiff --apply`**, repeatedly.
@@ -19,7 +19,7 @@ It’s “Ralph-style looping” but the work engine is **`gptdiff --apply`**, r
 Each iteration is:
 
 1. (Optional) run `--eval-cmd` to generate signals (metrics/logs)
-2. (Optional) run `--cmd` as a hard gate (stop when it passes)
+2. (Optional) run `--cmd` for verification/feedback
 3. run `gptdiff --apply` to make one coherent improvement
 4. repeat
 
@@ -61,7 +61,7 @@ Start the loop (Stop hook repeatedly runs `gptdiff --apply`).
   --max-iterations 10
 ```
 
-**Example (hard gate command):**
+**Example (with verification command):**
 ```
 +/gptdiff-loop --dir items --template generic \
   --goal "Fix content validation failures without weakening rules." \

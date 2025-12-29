@@ -19,7 +19,7 @@ OPTIONS:
   --template NAME              generic | game-world (default: generic)
   --max-iterations N           Stop after N iterations (default: 10, 0 = unlimited)
   --eval-cmd CMD               Optional evaluator command (signals only; never gates stop)
-  --cmd CMD                    Optional hard gate command (loop stops when it returns 0)
+  --cmd CMD                    Optional verification command (runs each iteration for feedback)
   --model MODEL                Optional GPTDiff model override
   --overwrite-scaffold          Overwrite .gptignore / INTERFACE.md / RUBRIC.md in target dir
   -h, --help                   Show help
@@ -198,7 +198,7 @@ cat <<EOF
 EOF
 
 if [[ "$CMD_YAML" != "null" ]]; then
-  echo "✅ Gate cmd:    $CMD"
+  echo "🔧 Verify cmd:  $CMD"
 fi
 if [[ "$EVAL_CMD_YAML" != "null" ]]; then
   echo "📊 Eval cmd:    $EVAL_CMD"
