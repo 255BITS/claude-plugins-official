@@ -20,8 +20,27 @@ OPTIONS:
   --max-iterations N           Stop after N iterations (default: 3, 0 = unlimited)
   --inference-mode MODE        "claude" (default) or "external" LLM
   --eval-cmd CMD               Optional evaluator command (signals only)
+  --feedback-cmd CMD           Run after each iteration, output feeds into next iteration
+                               (e.g., screenshot tools, gameplay comparators, test runners)
+  --feedback-image PATH        Image file to include in each iteration's context
+                               (e.g., screenshot saved by feedback-cmd or external tool)
   --model MODEL                Optional GPTDiff model override
   -h, --help                   Show help
+
+FEEDBACK EXAMPLES:
+  # Screenshot with image feedback (image is sent to LLM)
+  /start --dir game/ui --goal "Improve UI aesthetics" \
+    --feedback-cmd "screenshot-tool --output /tmp/ui.png" \
+    --feedback-image /tmp/ui.png
+
+  # Gameplay comparator with visual diff
+  /start --dir game/enemies --goal "Balance enemy difficulty" \
+    --feedback-cmd "python3 tools/run_simulation.py --screenshot /tmp/sim.png" \
+    --feedback-image /tmp/sim.png
+
+  # Test runner feedback (text only)
+  /start --dir src --goal "Fix failing tests" \
+    --feedback-cmd "npm test 2>&1 | tail -50"
 
 EXAMPLES:
   /start --dir src \
@@ -43,6 +62,8 @@ GOAL=""
 MAX_ITERATIONS="3"
 INFERENCE_MODE="claude"
 EVAL_CMD="null"
+FEEDBACK_CMD="null"
+FEEDBACK_IMAGE="null"
 MODEL="null"
 
 while [[ $# -gt 0 ]]; do
@@ -73,6 +94,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --eval-cmd)
       EVAL_CMD="${2:-}"
+      shift 2
+      ;;
+    --feedback-cmd)
+      FEEDBACK_CMD="${2:-}"
+      shift 2
+      ;;
+    --feedback-image)
+      FEEDBACK_IMAGE="${2:-}"
       shift 2
       ;;
     --model)
@@ -148,6 +177,22 @@ else
   MODEL_YAML="null"
 fi
 
+if [[ -n "${FEEDBACK_CMD:-}" ]] && [[ "$FEEDBACK_CMD" != "null" ]]; then
+  FEEDBACK_CMD_ESC="$(yaml_escape "$FEEDBACK_CMD")"
+  FEEDBACK_CMD_YAML="\"$FEEDBACK_CMD_ESC\""
+else
+  FEEDBACK_CMD_YAML="null"
+fi
+
+if [[ -n "${FEEDBACK_IMAGE:-}" ]] && [[ "$FEEDBACK_IMAGE" != "null" ]]; then
+  # Convert to absolute path
+  FEEDBACK_IMAGE_ABS="$(cd "$(dirname "$FEEDBACK_IMAGE")" 2>/dev/null && pwd)/$(basename "$FEEDBACK_IMAGE")" || FEEDBACK_IMAGE_ABS="$FEEDBACK_IMAGE"
+  FEEDBACK_IMAGE_ESC="$(yaml_escape "$FEEDBACK_IMAGE_ABS")"
+  FEEDBACK_IMAGE_YAML="\"$FEEDBACK_IMAGE_ESC\""
+else
+  FEEDBACK_IMAGE_YAML="null"
+fi
+
 # Build YAML arrays for dirs and files
 build_yaml_array() {
   local arr=("$@")
@@ -192,6 +237,8 @@ TARGET_FILES_YAML="$(build_yaml_array "${TARGET_FILES[@]}")"
   echo "goal: \"$GOAL_ESC\""
   echo "inference_mode: \"$INFERENCE_MODE\""
   echo "eval_cmd: $EVAL_CMD_YAML"
+  echo "feedback_cmd: $FEEDBACK_CMD_YAML"
+  echo "feedback_image: $FEEDBACK_IMAGE_YAML"
   echo "model: $MODEL_YAML"
   echo "started_at: \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\""
   echo "---"
@@ -239,6 +286,12 @@ echo "🧠 Inference:   $(if [[ "$INFERENCE_MODE" == "external" ]]; then echo "E
 
 if [[ "$EVAL_CMD_YAML" != "null" ]]; then
   echo "📊 Eval cmd:    $EVAL_CMD"
+fi
+if [[ "$FEEDBACK_CMD_YAML" != "null" ]]; then
+  echo "📸 Feedback:    $FEEDBACK_CMD"
+fi
+if [[ "$FEEDBACK_IMAGE_YAML" != "null" ]]; then
+  echo "🖼️  Image:       $FEEDBACK_IMAGE"
 fi
 if [[ "$MODEL_YAML" != "null" ]]; then
   echo "🤖 Model:       $MODEL"

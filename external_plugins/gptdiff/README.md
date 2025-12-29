@@ -47,14 +47,66 @@ If you have an evaluator script (even a simple one) that prints stats, you can f
   --max-iterations 10
 ```
 
-### 4) Run a “make tests pass” loop (command-gated)
+### 4) Run a loop with feedback between iterations
+
+Use `--feedback-cmd` to run a command after each iteration. The output feeds into the next iteration's context:
 
 ```bash
-/gptdiff-loop --dir items --template generic \
-  --goal "Fix validation errors without removing rules." \
-  --cmd "python3 -m pytest -q" \
-  --max-iterations 20
+# Test runner feedback
+/start --dir src \
+  --goal "Fix failing tests" \
+  --feedback-cmd "npm test 2>&1 | tail -50" \
+  --max-iterations 5
 ```
+
+The feedback command receives these environment variables:
+- `GPTDIFF_LOOP_TARGETS`: The target directories/files
+- `GPTDIFF_LOOP_ITERATION`: Current iteration number
+- `GPTDIFF_LOOP_GOAL`: The goal text
+
+### 5) Visual feedback with images
+
+Use `--feedback-image` to include a screenshot or visual output in each iteration. The image is sent to both Claude Code and external LLMs:
+
+```bash
+# Screenshot tool for UI improvements
+/start --dir game/ui \
+  --goal "Improve UI aesthetics and usability" \
+  --feedback-cmd "screenshot-tool --output /tmp/ui.png" \
+  --feedback-image /tmp/ui.png \
+  --max-iterations 5
+
+# Gameplay visual comparator
+/start --dir game/enemies \
+  --goal "Balance enemy difficulty - make visual indicators clearer" \
+  --feedback-cmd "python3 tools/run_simulation.py --screenshot /tmp/sim.png" \
+  --feedback-image /tmp/sim.png \
+  --max-iterations 10
+
+# Just image, no command (image generated elsewhere)
+/start --dir game/sprites \
+  --goal "Improve sprite animations based on preview" \
+  --feedback-image /tmp/game-preview.png \
+  --max-iterations 3
+```
+
+Supported image formats: PNG, JPEG, GIF, WebP
+
+### 6) Free exploration mode (no feedback command)
+
+When no `--feedback-cmd` is provided in Claude Code mode, Claude is prompted to run tools itself to evaluate progress:
+
+```bash
+/start --dir game/content \
+  --goal "Improve game balance and add variety" \
+  --max-iterations 5
+```
+
+Claude will be instructed to:
+- Take screenshots if working on UI
+- Run simulations if working on game logic
+- Execute test suites to verify correctness
+- Use any tools that help assess the impact of changes
 
 ## Why subdirectory loops?
 

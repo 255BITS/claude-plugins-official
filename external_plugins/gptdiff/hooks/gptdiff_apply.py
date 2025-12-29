@@ -3,9 +3,11 @@
 GPTDiff Apply - Python API wrapper for gptdiff plugin
 
 Uses the gptdiff Python API instead of the CLI to generate and apply diffs.
+Supports image input for visual feedback loops.
 """
 
 import argparse
+import base64
 import os
 import sys
 import threading
@@ -30,6 +32,7 @@ def main():
     parser.add_argument("--model", "-m", help="LLM model to use")
     parser.add_argument("--dir", "-d", action="append", default=[], help="Target directory (can specify multiple)")
     parser.add_argument("--file", "-f", action="append", default=[], help="Target file (can specify multiple)")
+    parser.add_argument("--image", "-i", action="append", default=[], help="Image file to include (can specify multiple)")
     parser.add_argument("--dry-run", action="store_true", help="Generate diff but don't apply")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     args = parser.parse_args()
@@ -109,6 +112,41 @@ def main():
     if args.verbose:
         print(f"Environment size: ~{len(environment) // 4} tokens", file=sys.stderr)
 
+    # Load images if provided
+    images = []
+    for image_path in args.image:
+        abs_image_path = os.path.abspath(image_path)
+        if not os.path.isfile(abs_image_path):
+            print(f"Warning: Image file does not exist: {abs_image_path}", file=sys.stderr)
+            continue
+        try:
+            with open(abs_image_path, 'rb') as f:
+                image_data = f.read()
+            # Detect media type from extension
+            ext = os.path.splitext(abs_image_path)[1].lower()
+            media_types = {
+                '.png': 'image/png',
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.gif': 'image/gif',
+                '.webp': 'image/webp',
+            }
+            media_type = media_types.get(ext, 'image/png')
+            # Encode as base64
+            image_b64 = base64.b64encode(image_data).decode('utf-8')
+            images.append({
+                'type': 'base64',
+                'media_type': media_type,
+                'data': image_b64,
+            })
+            if args.verbose:
+                print(f"Loaded image: {abs_image_path} ({media_type}, {len(image_data)} bytes)", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: Could not load image {abs_image_path}: {e}", file=sys.stderr)
+
+    if args.verbose and images:
+        print(f"Sending {len(images)} image(s) with request", file=sys.stderr)
+
     # Generate diff with heartbeat to prevent timeout
     print("📤 Sending to LLM...", file=sys.stderr)
     sys.stderr.flush()
@@ -132,6 +170,8 @@ def main():
         }
         if args.model:
             diff_kwargs["model"] = args.model
+        if images:
+            diff_kwargs["images"] = images
 
         diff_text = generate_diff(**diff_kwargs)
         stop_heartbeat.set()

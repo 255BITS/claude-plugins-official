@@ -97,6 +97,8 @@ ITERATION="$(strip_yaml_quotes "$(yaml_get_raw iteration)")"
 MAX_ITERATIONS="$(strip_yaml_quotes "$(yaml_get_raw max_iterations)")"
 GOAL="$(yaml_unescape "$(strip_yaml_quotes "$(yaml_get_raw goal)")")"
 EVAL_CMD_RAW="$(yaml_get_raw eval_cmd)"
+FEEDBACK_CMD_RAW="$(yaml_get_raw feedback_cmd)"
+FEEDBACK_IMAGE_RAW="$(yaml_get_raw feedback_image)"
 MODEL_RAW="$(yaml_get_raw model)"
 INFERENCE_MODE_RAW="$(yaml_get_raw inference_mode)"
 
@@ -111,11 +113,15 @@ if [[ -n "$LEGACY_TARGET_DIR" ]] && [[ -z "$TARGET_DIRS_STR" ]]; then
 fi
 
 EVAL_CMD="$(yaml_unescape "$(strip_yaml_quotes "$EVAL_CMD_RAW")")"
+FEEDBACK_CMD="$(yaml_unescape "$(strip_yaml_quotes "$FEEDBACK_CMD_RAW")")"
+FEEDBACK_IMAGE="$(yaml_unescape "$(strip_yaml_quotes "$FEEDBACK_IMAGE_RAW")")"
 MODEL="$(yaml_unescape "$(strip_yaml_quotes "$MODEL_RAW")")"
 INFERENCE_MODE="$(yaml_unescape "$(strip_yaml_quotes "$INFERENCE_MODE_RAW")")"
 
 # Normalize null-like values
 if [[ "${EVAL_CMD_RAW:-}" == "null" ]] || [[ -z "${EVAL_CMD:-}" ]]; then EVAL_CMD=""; fi
+if [[ "${FEEDBACK_CMD_RAW:-}" == "null" ]] || [[ -z "${FEEDBACK_CMD:-}" ]]; then FEEDBACK_CMD=""; fi
+if [[ "${FEEDBACK_IMAGE_RAW:-}" == "null" ]] || [[ -z "${FEEDBACK_IMAGE:-}" ]]; then FEEDBACK_IMAGE=""; fi
 if [[ "${MODEL_RAW:-}" == "null" ]] || [[ -z "${MODEL:-}" ]]; then MODEL=""; fi
 if [[ "${INFERENCE_MODE_RAW:-}" == "null" ]] || [[ -z "${INFERENCE_MODE:-}" ]]; then INFERENCE_MODE="claude"; fi
 
@@ -193,6 +199,7 @@ LOOP_DIR="$ROOT_DIR/.claude/start/$TARGET_SLUG"
 mkdir -p "$LOOP_DIR"
 
 EVAL_LOG="$LOOP_DIR/eval.log"
+FEEDBACK_LOG="$LOOP_DIR/feedback.log"
 GPTDIFF_LOG="$LOOP_DIR/gptdiff.log"
 DIFFSTAT_FILE="$LOOP_DIR/diffstat.txt"
 CHANGED_FILES_FILE="$LOOP_DIR/changed-files.txt"
@@ -231,6 +238,13 @@ fi
 EVAL_TAIL=""
 if [[ -f "$EVAL_LOG" ]]; then
   EVAL_TAIL="$(tail -n 80 "$EVAL_LOG" | sed 's/\r$//')"
+fi
+
+# Get feedback from PREVIOUS iteration (if any)
+# Feedback runs AFTER changes are made, so this is from the last iteration
+FEEDBACK_TAIL=""
+if [[ -f "$FEEDBACK_LOG" ]]; then
+  FEEDBACK_TAIL="$(tail -n 100 "$FEEDBACK_LOG" | sed 's/\r$//')"
 fi
 
 # Get list of files in target directories/files (using gptdiff's .gptignore-aware loader)
@@ -276,6 +290,8 @@ CONSTRAINTS:
 SIGNALS (optional):
 --- eval (tail) ---
 $EVAL_TAIL
+
+$(if [[ -n "$FEEDBACK_TAIL" ]]; then echo "--- feedback from previous iteration ---"; echo "$FEEDBACK_TAIL"; fi)
 "
 
 # Run the appropriate inference mode
@@ -325,6 +341,10 @@ if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
     if [[ -n "$MODEL" ]]; then
       APPLY_ARGS+=" --model \"$MODEL\""
     fi
+    # Add feedback image if it exists
+    if [[ -n "$FEEDBACK_IMAGE" ]] && [[ -f "$FEEDBACK_IMAGE" ]]; then
+      APPLY_ARGS+=" --image \"$FEEDBACK_IMAGE\""
+    fi
     while IFS= read -r dir; do
       [[ -z "$dir" ]] && continue
       APPLY_ARGS+=" --dir \"$ROOT_DIR/$dir\""
@@ -368,6 +388,28 @@ else
   echo "(not a git repo)" > "$DIFFSTAT_FILE"
   echo "(not a git repo)" > "$CHANGED_FILES_FILE"
   echo "(not a git repo)" > "$STATUS_FILE"
+fi
+
+# Run feedback command (after changes are made, for next iteration)
+# This captures external feedback like screenshots, test results, simulations
+FEEDBACK_EXIT=0
+FEEDBACK_JUST_RAN="false"
+if [[ -n "$FEEDBACK_CMD" ]] && [[ "${EXTERNAL_LLM_PENDING:-false}" != "true" ]]; then
+  append_header "$FEEDBACK_LOG" "FEEDBACK (iteration $ITERATION)"
+  set +e
+  (
+    cd "$ROOT_DIR" || exit 127
+    GPTDIFF_LOOP_TARGETS="$TARGETS_DISPLAY" \
+    GPTDIFF_LOOP_ITERATION="$ITERATION" \
+    GPTDIFF_LOOP_GOAL="$GOAL" \
+    bash -lc "$FEEDBACK_CMD"
+  ) >> "$FEEDBACK_LOG" 2>&1
+  FEEDBACK_EXIT=$?
+  set -e
+  echo "" >> "$FEEDBACK_LOG"
+  echo "Exit code: $FEEDBACK_EXIT" >> "$FEEDBACK_LOG"
+  echo "" >> "$FEEDBACK_LOG"
+  FEEDBACK_JUST_RAN="true"
 fi
 
 # Bump iteration in state file (only if not waiting for external LLM)
@@ -474,6 +516,54 @@ The external LLM made the changes above. You may now:
 else
   # Claude Code mode: ask Claude Code to make the improvements
   # Claude Code can explore the codebase itself - no need to constrain to specific files
+
+  # Get fresh feedback output if it just ran
+  FRESH_FEEDBACK=""
+  if [[ "$FEEDBACK_JUST_RAN" == "true" ]] && [[ -f "$FEEDBACK_LOG" ]]; then
+    FRESH_FEEDBACK="$(tail -n 100 "$FEEDBACK_LOG" | sed 's/\r$//')"
+  fi
+
+  # Build feedback section for prompt
+  FEEDBACK_SECTION=""
+  if [[ -n "$FRESH_FEEDBACK" ]]; then
+    FEEDBACK_SECTION="### 📸 Feedback from this iteration
+\`\`\`
+$FRESH_FEEDBACK
+\`\`\`
+
+"
+  elif [[ -n "$FEEDBACK_TAIL" ]]; then
+    FEEDBACK_SECTION="### 📸 Feedback from previous iteration
+\`\`\`
+$FEEDBACK_TAIL
+\`\`\`
+
+"
+  fi
+
+  # Build image section if feedback image exists
+  IMAGE_SECTION=""
+  if [[ -n "$FEEDBACK_IMAGE" ]] && [[ -f "$FEEDBACK_IMAGE" ]]; then
+    IMAGE_SECTION="### 🖼️ Visual Feedback
+**IMPORTANT:** Read the image file to see the current state:
+\`\`\`
+$FEEDBACK_IMAGE
+\`\`\`
+Use your Read tool on this image file to view it before making changes.
+
+"
+  fi
+
+  # Build exploration instruction based on whether feedback_cmd is set
+  EXPLORATION_INSTRUCTION=""
+  if [[ -z "$FEEDBACK_CMD" ]] && [[ -z "$FEEDBACK_IMAGE" ]]; then
+    EXPLORATION_INSTRUCTION="5. **Gather feedback** - After making changes, run tools to evaluate progress:
+   - Take screenshots if working on UI
+   - Run simulations if working on game logic
+   - Execute test suites to verify correctness
+   - Use any tools that help assess the impact of your changes"
+  fi
+
   REASON_PROMPT="
 ╔══════════════════════════════════════════════════════════════════╗
 ║  🔁 GPTDIFF LOOP - ITERATION $ITERATION of $(printf "%-3s" "$(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "∞"; fi)")                          ║
@@ -495,8 +585,9 @@ $ITER_INFO
    - Commit changes: \`git add . && git commit -m \"...\"\`
    - Run tests or linters to verify
    - Any other maintenance commands
+$(if [[ -n "$EXPLORATION_INSTRUCTION" ]]; then echo "$EXPLORATION_INSTRUCTION"; fi)
 
-$(if [[ -n "$EVAL_TAIL" ]]; then echo "### Signals from evaluators"; echo '```'; echo "$EVAL_TAIL"; echo '```'; fi)
+${IMAGE_SECTION}${FEEDBACK_SECTION}$(if [[ -n "$EVAL_TAIL" ]]; then echo "### Signals from evaluators"; echo '```'; echo "$EVAL_TAIL"; echo '```'; echo ""; fi)
 
 $(if [[ -n "$CHANGED_FILES_PREVIEW" ]]; then echo "### Recent changes"; echo '```'; echo "$CHANGED_FILES_PREVIEW"; echo '```'; fi)
 

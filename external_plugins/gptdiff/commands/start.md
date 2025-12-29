@@ -1,6 +1,6 @@
 ---
 description: "Start a GPTDiff-powered agent loop on directories or files"
-argument-hint: "<goal> | --dir PATH --goal '...' [--max-iterations N]"
+argument-hint: "<goal> | --dir PATH --goal '...' [--feedback-cmd CMD] [--max-iterations N]"
 allowed-tools: ["Bash", "Glob", "Read", "AskUserQuestion"]
 ---
 
