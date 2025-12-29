@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # GPTDiff Loop Setup Script
-# Writes .claude/gptdiff-start.local.md (state consumed by stop hook)
+# Writes .claude/start.local.md (state consumed by stop hook)
 
 set -euo pipefail
 
@@ -10,7 +10,7 @@ show_help() {
 GPTDiff Loop (Agent Loop)
 
 USAGE:
-  /gptdiff-start --dir PATH --goal "..." [OPTIONS]
+  /start --dir PATH --goal "..." [OPTIONS]
 
 OPTIONS:
   --dir PATH                   Target subdirectory to work on (required)
@@ -22,11 +22,11 @@ OPTIONS:
   -h, --help                   Show help
 
 EXAMPLES:
-  /gptdiff-start --dir src \
+  /start --dir src \
     --goal "Improve code quality and add tests." \
     --max-iterations 5
 
-  /gptdiff-start --dir src \
+  /start --dir src \
     --goal "Fix bugs and improve error handling." \
     --cmd "npm run build" \
     --max-iterations 3
@@ -71,7 +71,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "❌ Unknown argument: $1" >&2
-      echo "   Try: /gptdiff-start --help" >&2
+      echo "   Try: /start --help" >&2
       exit 1
       ;;
   esac
@@ -130,7 +130,7 @@ else
   MODEL_YAML="null"
 fi
 
-cat > .claude/gptdiff-start.local.md <<EOF
+cat > .claude/start.local.md <<EOF
 ---
 active: true
 iteration: 1
@@ -146,7 +146,7 @@ started_at: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 GPTDiff loop is active.
  
 Please reply with a short progress note (or just \`ok\`) and then stop.
-To cancel: /gptdiff-stop
+To cancel: /stop
 EOF
 
 cat <<EOF
@@ -176,7 +176,7 @@ cat <<EOF
 │  The loop will now run automatically via the Stop hook.        │
 │  Each iteration: analyze → improve → verify → repeat           │
 │                                                                 │
-│  To cancel anytime:  /gptdiff-stop                       │
-│  To check progress:  cat .claude/gptdiff-start.local.md          │
+│  To cancel anytime:  /stop                       │
+│  To check progress:  cat .claude/start.local.md          │
 └─────────────────────────────────────────────────────────────────┘
 EOF

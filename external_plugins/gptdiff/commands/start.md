@@ -55,6 +55,6 @@ Help the user configure the loop interactively:
 
 The loop runs via a **Stop hook** and iterates until `--max-iterations` is reached.
 
-Cancel anytime with: `/gptdiff-stop`
+Cancel anytime with: `/stop`
 
 After setup, respond with a short progress note (or just `ok`). The loop will take over from here.

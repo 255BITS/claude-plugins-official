@@ -7,8 +7,8 @@
 #   - runs optional verification command (for feedback, does not gate)
 #   - makes improvements via LLM (external or Claude Code)
 #
-# The loop is activated by /gptdiff-start which creates:
-#   .claude/gptdiff-start.local.md
+# The loop is activated by /start which creates:
+#   .claude/start.local.md
 #
 # Inference mode:
 #   - If GPTDIFF_LLM_API_KEY is set: uses external LLM via gptdiff Python API
@@ -20,7 +20,7 @@ set -euo pipefail
 _HOOK_INPUT="$(cat || true)"
 
 ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-STATE_FILE="$ROOT_DIR/.claude/gptdiff-start.local.md"
+STATE_FILE="$ROOT_DIR/.claude/start.local.md"
 
 if [[ ! -f "$STATE_FILE" ]]; then
   # No active loop - allow normal stop
@@ -121,7 +121,7 @@ fi
 
 # Logs are kept per target directory
 TARGET_SLUG="$(echo "$TARGET_DIR" | sed 's#[^A-Za-z0-9._-]#_#g')"
-LOOP_DIR="$ROOT_DIR/.claude/gptdiff-start/$TARGET_SLUG"
+LOOP_DIR="$ROOT_DIR/.claude/start/$TARGET_SLUG"
 mkdir -p "$LOOP_DIR"
 
 EVAL_LOG="$LOOP_DIR/eval.log"
@@ -304,9 +304,9 @@ if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $NEXT_ITERATION -gt $MAX_ITERATIONS ]]; the
   SYSTEM_MSG="🛑 GPTDiff FINAL ITERATION $ITER_INFO - Loop complete after this. Review: git diff"
 else
   if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
-    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGET_DIR | External LLM | /gptdiff-stop to stop"
+    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGET_DIR | External LLM | /stop to stop"
   else
-    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGET_DIR | Claude Code | /gptdiff-stop to stop"
+    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGET_DIR | Claude Code | /stop to stop"
   fi
 fi
 
