@@ -11,6 +11,7 @@ This creates a focused “domain workspace” directory with:
 - `INTERFACE.md` (explicit contract)
 - optionally `RUBRIC.md` (for creative domains)
 
-```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/scaffold-loop-dir.sh" $ARGUMENTS
+Run this script using the Bash tool (replace $ARGUMENTS with the user's arguments):
+```
+/home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/scaffold-loop-dir.sh $ARGUMENTS
 ```

@@ -6,10 +6,9 @@ allowed-tools: ["Bash"]
 
 # GPTDiff Loop
 
-Initialize the loop (this scaffolds the target directory and writes loop state):
-
-```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/setup-gptdiff-loop.sh" $ARGUMENTS
+Run this setup script using the Bash tool with the user's arguments ($ARGUMENTS):
+```
+/home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-loop.sh $ARGUMENTS
 ```
 
 The loop runs via a **Stop hook**:
