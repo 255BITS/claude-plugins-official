@@ -287,14 +287,33 @@ TEMP_FILE="${STATE_FILE}.tmp.$$"
 sed "s/^iteration: .*/iteration: $NEXT_ITERATION/" "$STATE_FILE" > "$TEMP_FILE"
 mv "$TEMP_FILE" "$STATE_FILE"
 
+# Build progress indicator
+if [[ $MAX_ITERATIONS -gt 0 ]]; then
+  REMAINING=$((MAX_ITERATIONS - ITERATION))
+  PROGRESS_BAR=""
+  for ((i=1; i<=MAX_ITERATIONS && i<=10; i++)); do
+    if [[ $i -le $ITERATION ]]; then
+      PROGRESS_BAR+="●"
+    else
+      PROGRESS_BAR+="○"
+    fi
+  done
+  if [[ $MAX_ITERATIONS -gt 10 ]]; then
+    PROGRESS_BAR+="..."
+  fi
+  ITER_INFO="[$ITERATION/$MAX_ITERATIONS] $PROGRESS_BAR ($REMAINING remaining)"
+else
+  ITER_INFO="[$ITERATION/∞]"
+fi
+
 # If next iteration would exceed max, stop on next stop attempt
 if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $NEXT_ITERATION -gt $MAX_ITERATIONS ]]; then
-  SYSTEM_MSG="🛑 GPTDiff loop will stop next cycle (max iterations reached). Review git diff."
+  SYSTEM_MSG="🛑 GPTDiff FINAL ITERATION $ITER_INFO - Loop complete after this. Review: git diff"
 else
   if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
-    SYSTEM_MSG="🔁 GPTDiff loop iter $ITERATION (external LLM) | target: $TARGET_DIR | cancel: /cancel-gptdiff-loop"
+    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGET_DIR | External LLM | /cancel-gptdiff-loop to stop"
   else
-    SYSTEM_MSG="🔁 GPTDiff loop iter $ITERATION (Claude Code) | target: $TARGET_DIR | cancel: /cancel-gptdiff-loop"
+    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGET_DIR | Claude Code | /cancel-gptdiff-loop to stop"
   fi
 fi
 
@@ -306,11 +325,13 @@ if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
   # External LLM mode: gptdiff already made changes, just summarize
   REASON_PROMPT="$BASE_PROMPT
 
-## GPTDiff Loop Status - Iteration $ITERATION
+╔══════════════════════════════════════════════════════════════════╗
+║  🔁 GPTDIFF LOOP - ITERATION $ITERATION of $(printf "%-3s" "$(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "∞"; fi)")                          ║
+╚══════════════════════════════════════════════════════════════════╝
 
 **Mode:** External LLM (gptdiff)
 **Target:** \`$TARGET_DIR\`
-**Iteration:** $ITERATION / $(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "unlimited"; fi)
+**Progress:** $ITER_INFO
 **gptdiff exit:** $GPTDIFF_EXIT
 **eval exit:** $EVAL_EXIT
 **cmd exit:** $CMD_EXIT
@@ -330,13 +351,16 @@ $DIFFSTAT_PREVIEW
 **Reply with 1-5 bullets: what changed + what to improve next, then stop.**"
 else
   # Claude Code mode: ask Claude Code to make the improvements
-  REASON_PROMPT="## GPTDiff Loop - Iteration $ITERATION
+  REASON_PROMPT="
+╔══════════════════════════════════════════════════════════════════╗
+║  🔁 GPTDIFF LOOP - ITERATION $ITERATION of $(printf "%-3s" "$(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "∞"; fi)")                          ║
+╚══════════════════════════════════════════════════════════════════╝
 
 You are running an iterative improvement loop on a subdirectory.
 
 ### Task
 **Target directory:** \`$TARGET_DIR\`
-**Iteration:** $ITERATION / $(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "unlimited"; fi)
+**Progress:** $ITER_INFO
 **Template:** $TEMPLATE
 
 ### Goal
