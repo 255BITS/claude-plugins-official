@@ -14,22 +14,22 @@ Run iterative improvement loops on a directory:
 
 ## Commands
 
-### /gptdiff-loop
+### /gptdiff-start
 
 Start the loop. Run without arguments for interactive setup.
 
 **Examples:**
 ```
-/gptdiff-loop --dir src --goal "Improve code quality" --max-iterations 5
+/gptdiff-start --dir src --goal "Improve code quality" --max-iterations 5
 
-/gptdiff-loop --dir src --goal "Fix bugs" --cmd "npm run build" --max-iterations 3
+/gptdiff-start --dir src --goal "Fix bugs" --cmd "npm run build" --max-iterations 3
 ```
 
 ### /gptdiff-status
 
 Check the current loop progress (iteration count, goal, recent changes).
 
-### /cancel-gptdiff-loop
+### /gptdiff-stop
 
 Stop the current loop.
 

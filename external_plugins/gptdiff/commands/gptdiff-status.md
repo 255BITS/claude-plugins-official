@@ -22,7 +22,7 @@ Check the current loop status by running these commands:
 
    ```
    # Show loop logs directory
-   ls -la .claude/gptdiff-loop/ 2>/dev/null
+   ls -la .claude/gptdiff-start/ 2>/dev/null
    ```
 
 4. **Report status** with a visual summary:
@@ -31,4 +31,4 @@ Check the current loop status by running these commands:
    - Show: iteration X of Y (Z remaining)
    - Show the goal
    - Show recent file changes from git diff --stat
-   - Remind user: `/cancel-gptdiff-loop` to stop
+   - Remind user: `/gptdiff-stop` to stop

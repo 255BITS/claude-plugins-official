@@ -10,7 +10,7 @@ allowed-tools: ["Bash", "Glob", "Read", "AskUserQuestion"]
 
 Run the setup script directly:
 ```
-/home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-loop.sh $ARGUMENTS
+/home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh $ARGUMENTS
 ```
 
 ## If NO arguments provided (empty $ARGUMENTS):
@@ -48,13 +48,13 @@ Help the user configure the loop interactively:
 
 6. **Run the setup** with the gathered parameters:
    ```
-   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-loop.sh --dir DIR --goal "GOAL" --max-iterations N [--cmd "CMD"]
+   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N [--cmd "CMD"]
    ```
 
 ---
 
 The loop runs via a **Stop hook** and iterates until `--max-iterations` is reached.
 
-Cancel anytime with: `/cancel-gptdiff-loop`
+Cancel anytime with: `/gptdiff-stop`
 
 After setup, respond with a short progress note (or just `ok`). The loop will take over from here.
