@@ -116,6 +116,32 @@ The loop **automatically detects** any images saved to the feedback path and inc
 
 This works with both Claude Code and external LLMs - no configuration needed!
 
+### 7) Agent-based feedback (expert reviewers)
+
+Use `--feedback-agent` to have Claude spawn a specialized agent to review changes each iteration:
+
+```bash
+# Explicit agent type
+/start --dir game/ui --goal "Improve UI aesthetics" \
+  --feedback-agent ux-expert --max-iterations 5
+
+# Auto-detect from goal keywords
+/start --dir game/enemies --goal "Balance enemy difficulty" \
+  --feedback-agent auto --max-iterations 5
+```
+
+Available agent types:
+- **ux-expert**: Reviews UI/UX for usability, visual hierarchy, user flow
+- **game-balance**: Reviews game mechanics, difficulty curves, stat balance
+- **code-quality**: Reviews maintainability, best practices, potential bugs
+- **performance**: Reviews for bottlenecks, memory usage, algorithmic complexity
+- **security**: Reviews for vulnerabilities, OWASP risks, secure coding
+- **accessibility**: Reviews for WCAG compliance, screen reader support
+
+With `--feedback-agent auto`, the agent type is detected from goal keywords (e.g., "UI" → ux-expert, "balance" → game-balance).
+
+Agent feedback is saved to `.claude/start/<slug>/agent-feedback.txt` and included in subsequent iterations.
+
 ## Why subdirectory loops?
 
 In game development you often have a dedicated **content surface area**:

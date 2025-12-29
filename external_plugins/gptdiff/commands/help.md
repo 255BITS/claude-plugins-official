@@ -25,6 +25,7 @@ Start the loop. Run without arguments for interactive setup.
 - `--max-iterations N` - Stop after N iterations (default: 3)
 - `--feedback-cmd CMD` - Run after each iteration, output feeds into next
 - `--feedback-image PATH` - Image file to include in each iteration
+- `--feedback-agent TYPE` - Spawn expert agent to review changes (ux-expert, game-balance, code-quality, performance, security, accessibility, or "auto")
 - `--eval-cmd CMD` - Optional evaluator command (signals only)
 - `--inference-mode MODE` - "claude" (default) or "external" LLM
 
@@ -41,6 +42,10 @@ Start the loop. Run without arguments for interactive setup.
 /start --dir game/ui --goal "Improve UI" \
   --feedback-cmd "screenshot-tool /tmp/ui.png" \
   --feedback-image /tmp/ui.png --max-iterations 5
+
+# Expert agent feedback (auto-detect type)
+/start --dir game/enemies --goal "Balance difficulty" \
+  --feedback-agent auto --max-iterations 5
 ```
 
 ### /status
@@ -75,11 +80,25 @@ Claude can save images to a known path, and the loop will automatically include 
 
 This lets Claude decide what feedback to gather without pre-configuring commands.
 
+## Expert Agent Feedback
+
+Use `--feedback-agent` to have Claude spawn a specialized agent each iteration:
+
+- **ux-expert**: UI/UX review - usability, visual hierarchy, user flow
+- **game-balance**: Game mechanics - difficulty curves, stat balance, exploits
+- **code-quality**: Code review - maintainability, best practices, bugs
+- **performance**: Performance review - bottlenecks, memory, complexity
+- **security**: Security review - vulnerabilities, OWASP risks
+- **accessibility**: A11y review - WCAG, screen readers, keyboard nav
+
+Use `--feedback-agent auto` to detect the agent type from goal keywords.
+
 ## Logs
 
 - State: `.claude/start.local.md`
 - Logs: `.claude/start/<target-slug>/`
   - `eval.log` - Evaluator output
   - `feedback.log` - Feedback command output
+  - `agent-feedback.txt` - Expert agent feedback
   - `gptdiff.log` - LLM inference log
   - `diffstat.txt` - Changes summary

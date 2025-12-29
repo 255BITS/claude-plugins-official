@@ -99,6 +99,7 @@ GOAL="$(yaml_unescape "$(strip_yaml_quotes "$(yaml_get_raw goal)")")"
 EVAL_CMD_RAW="$(yaml_get_raw eval_cmd)"
 FEEDBACK_CMD_RAW="$(yaml_get_raw feedback_cmd)"
 FEEDBACK_IMAGE_RAW="$(yaml_get_raw feedback_image)"
+FEEDBACK_AGENT_RAW="$(yaml_get_raw feedback_agent)"
 MODEL_RAW="$(yaml_get_raw model)"
 INFERENCE_MODE_RAW="$(yaml_get_raw inference_mode)"
 
@@ -115,6 +116,7 @@ fi
 EVAL_CMD="$(yaml_unescape "$(strip_yaml_quotes "$EVAL_CMD_RAW")")"
 FEEDBACK_CMD="$(yaml_unescape "$(strip_yaml_quotes "$FEEDBACK_CMD_RAW")")"
 FEEDBACK_IMAGE="$(yaml_unescape "$(strip_yaml_quotes "$FEEDBACK_IMAGE_RAW")")"
+FEEDBACK_AGENT="$(yaml_unescape "$(strip_yaml_quotes "$FEEDBACK_AGENT_RAW")")"
 MODEL="$(yaml_unescape "$(strip_yaml_quotes "$MODEL_RAW")")"
 INFERENCE_MODE="$(yaml_unescape "$(strip_yaml_quotes "$INFERENCE_MODE_RAW")")"
 
@@ -122,6 +124,7 @@ INFERENCE_MODE="$(yaml_unescape "$(strip_yaml_quotes "$INFERENCE_MODE_RAW")")"
 if [[ "${EVAL_CMD_RAW:-}" == "null" ]] || [[ -z "${EVAL_CMD:-}" ]]; then EVAL_CMD=""; fi
 if [[ "${FEEDBACK_CMD_RAW:-}" == "null" ]] || [[ -z "${FEEDBACK_CMD:-}" ]]; then FEEDBACK_CMD=""; fi
 if [[ "${FEEDBACK_IMAGE_RAW:-}" == "null" ]] || [[ -z "${FEEDBACK_IMAGE:-}" ]]; then FEEDBACK_IMAGE=""; fi
+if [[ "${FEEDBACK_AGENT_RAW:-}" == "null" ]] || [[ -z "${FEEDBACK_AGENT:-}" ]]; then FEEDBACK_AGENT=""; fi
 if [[ "${MODEL_RAW:-}" == "null" ]] || [[ -z "${MODEL:-}" ]]; then MODEL=""; fi
 if [[ "${INFERENCE_MODE_RAW:-}" == "null" ]] || [[ -z "${INFERENCE_MODE:-}" ]]; then INFERENCE_MODE="claude"; fi
 
@@ -245,6 +248,13 @@ fi
 FEEDBACK_TAIL=""
 if [[ -f "$FEEDBACK_LOG" ]]; then
   FEEDBACK_TAIL="$(tail -n 100 "$FEEDBACK_LOG" | sed 's/\r$//')"
+fi
+
+# Get agent feedback from PREVIOUS iteration (if any)
+AGENT_FEEDBACK_FILE="$LOOP_DIR/agent-feedback.txt"
+AGENT_FEEDBACK_TAIL=""
+if [[ -f "$AGENT_FEEDBACK_FILE" ]]; then
+  AGENT_FEEDBACK_TAIL="$(tail -n 100 "$AGENT_FEEDBACK_FILE" | sed 's/\r$//')"
 fi
 
 # Get list of files in target directories/files (using gptdiff's .gptignore-aware loader)
@@ -548,6 +558,16 @@ $FEEDBACK_TAIL
 "
   fi
 
+  # Add agent feedback if present
+  if [[ -n "$AGENT_FEEDBACK_TAIL" ]]; then
+    FEEDBACK_SECTION+="### 🧑‍💼 Expert Agent Feedback (from previous iteration)
+\`\`\`
+$AGENT_FEEDBACK_TAIL
+\`\`\`
+
+"
+  fi
+
   # Build image section - check both explicit --feedback-image AND auto-detected Claude-saved images
   IMAGE_SECTION=""
   ALL_FEEDBACK_IMAGES=()
@@ -594,6 +614,69 @@ $img
    - **To persist images for next iteration**: Save to \`$LOOP_DIR/feedback-image.png\`
      (The loop will automatically include this image in the next iteration)"
 
+  # Build agent feedback instruction if feedback_agent is set
+  AGENT_INSTRUCTION=""
+  RESOLVED_AGENT="$FEEDBACK_AGENT"
+
+  # Auto-detect agent type from goal keywords
+  if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
+    GOAL_LOWER="$(echo "$GOAL" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$GOAL_LOWER" =~ (ui|ux|interface|design|layout|visual|aesthetic|button|menu|screen) ]]; then
+      RESOLVED_AGENT="ux-expert"
+    elif [[ "$GOAL_LOWER" =~ (balance|difficulty|enemy|damage|health|stats|level|progression|gameplay) ]]; then
+      RESOLVED_AGENT="game-balance"
+    elif [[ "$GOAL_LOWER" =~ (performance|speed|optimize|fast|slow|memory|cpu|latency) ]]; then
+      RESOLVED_AGENT="performance"
+    elif [[ "$GOAL_LOWER" =~ (security|auth|password|token|vulnerability|xss|injection|csrf) ]]; then
+      RESOLVED_AGENT="security"
+    elif [[ "$GOAL_LOWER" =~ (accessibility|a11y|screen.reader|aria|wcag|contrast) ]]; then
+      RESOLVED_AGENT="accessibility"
+    elif [[ "$GOAL_LOWER" =~ (quality|refactor|clean|maintainable|readable|test) ]]; then
+      RESOLVED_AGENT="code-quality"
+    else
+      RESOLVED_AGENT=""  # No auto-detection match
+    fi
+  fi
+
+  # Define agent persona prompts
+  if [[ -n "$RESOLVED_AGENT" ]]; then
+    case "$RESOLVED_AGENT" in
+      ux-expert)
+        AGENT_PERSONA="You are a UX/UI expert. Review the code changes for: visual hierarchy, user flow, accessibility basics, consistency with design patterns, intuitive interactions, and potential usability issues. Focus on the user experience impact."
+        ;;
+      game-balance)
+        AGENT_PERSONA="You are a game balance expert. Review the code changes for: difficulty curve, stat balance, progression pacing, potential exploits, player fairness, and fun factor. Consider how changes affect different player skill levels."
+        ;;
+      code-quality)
+        AGENT_PERSONA="You are a code quality expert. Review for: maintainability, readability, SOLID principles, appropriate abstractions, test coverage gaps, potential bugs, and adherence to best practices."
+        ;;
+      performance)
+        AGENT_PERSONA="You are a performance expert. Review for: algorithmic complexity, memory usage, unnecessary computations, caching opportunities, async/await patterns, and potential bottlenecks."
+        ;;
+      security)
+        AGENT_PERSONA="You are a security expert. Review for: input validation, authentication/authorization issues, injection vulnerabilities, sensitive data exposure, OWASP top 10 risks, and secure coding practices."
+        ;;
+      accessibility)
+        AGENT_PERSONA="You are an accessibility expert. Review for: WCAG compliance, screen reader compatibility, keyboard navigation, color contrast, focus management, and semantic HTML usage."
+        ;;
+      *)
+        AGENT_PERSONA="You are an expert reviewer. Analyze the code changes and provide specific, actionable feedback."
+        ;;
+    esac
+
+    AGENT_INSTRUCTION="
+6. **Get expert feedback** - After making changes, spawn a feedback agent:
+   Use the Task tool with subagent_type=\"general-purpose\" and this prompt:
+   \"$AGENT_PERSONA
+
+   Review the recent changes in: $TARGETS_DISPLAY
+   Goal: $GOAL
+
+   Provide specific, actionable feedback. Save any analysis to $LOOP_DIR/agent-feedback.txt\"
+
+   Include the agent's feedback in your summary."
+  fi
+
   REASON_PROMPT="
 ╔══════════════════════════════════════════════════════════════════╗
 ║  🔁 GPTDIFF LOOP - ITERATION $ITERATION of $(printf "%-3s" "$(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "∞"; fi)")                          ║
@@ -615,7 +698,7 @@ $ITER_INFO
    - Commit changes: \`git add . && git commit -m \"...\"\`
    - Run tests or linters to verify
    - Any other maintenance commands
-$EXPLORATION_INSTRUCTION
+$EXPLORATION_INSTRUCTION$AGENT_INSTRUCTION
 
 ${IMAGE_SECTION}${FEEDBACK_SECTION}$(if [[ -n "$EVAL_TAIL" ]]; then echo "### Signals from evaluators"; echo '```'; echo "$EVAL_TAIL"; echo '```'; echo ""; fi)
 

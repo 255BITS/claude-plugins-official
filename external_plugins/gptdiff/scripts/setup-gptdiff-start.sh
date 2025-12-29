@@ -24,6 +24,9 @@ OPTIONS:
                                (e.g., screenshot tools, gameplay comparators, test runners)
   --feedback-image PATH        Image file to include in each iteration's context
                                (e.g., screenshot saved by feedback-cmd or external tool)
+  --feedback-agent TYPE        Spawn a specialized agent to review changes each iteration
+                               Types: ux-expert, game-balance, code-quality, performance,
+                               security, accessibility, or "auto" to detect from goal
   --model MODEL                Optional GPTDiff model override
   -h, --help                   Show help
 
@@ -41,6 +44,14 @@ FEEDBACK EXAMPLES:
   # Test runner feedback (text only)
   /start --dir src --goal "Fix failing tests" \
     --feedback-cmd "npm test 2>&1 | tail -50"
+
+  # Agent-based feedback (UX expert reviews UI changes)
+  /start --dir game/ui --goal "Improve UI aesthetics" \
+    --feedback-agent ux-expert
+
+  # Auto-detect agent from goal
+  /start --dir game/enemies --goal "Balance enemy difficulty" \
+    --feedback-agent auto
 
 EXAMPLES:
   /start --dir src \
@@ -64,6 +75,7 @@ INFERENCE_MODE="claude"
 EVAL_CMD="null"
 FEEDBACK_CMD="null"
 FEEDBACK_IMAGE="null"
+FEEDBACK_AGENT="null"
 MODEL="null"
 
 while [[ $# -gt 0 ]]; do
@@ -102,6 +114,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --feedback-image)
       FEEDBACK_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --feedback-agent)
+      FEEDBACK_AGENT="${2:-}"
       shift 2
       ;;
     --model)
@@ -193,6 +209,13 @@ else
   FEEDBACK_IMAGE_YAML="null"
 fi
 
+if [[ -n "${FEEDBACK_AGENT:-}" ]] && [[ "$FEEDBACK_AGENT" != "null" ]]; then
+  FEEDBACK_AGENT_ESC="$(yaml_escape "$FEEDBACK_AGENT")"
+  FEEDBACK_AGENT_YAML="\"$FEEDBACK_AGENT_ESC\""
+else
+  FEEDBACK_AGENT_YAML="null"
+fi
+
 # Build YAML arrays for dirs and files
 build_yaml_array() {
   local arr=("$@")
@@ -239,6 +262,7 @@ TARGET_FILES_YAML="$(build_yaml_array "${TARGET_FILES[@]}")"
   echo "eval_cmd: $EVAL_CMD_YAML"
   echo "feedback_cmd: $FEEDBACK_CMD_YAML"
   echo "feedback_image: $FEEDBACK_IMAGE_YAML"
+  echo "feedback_agent: $FEEDBACK_AGENT_YAML"
   echo "model: $MODEL_YAML"
   echo "started_at: \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\""
   echo "---"
@@ -292,6 +316,9 @@ if [[ "$FEEDBACK_CMD_YAML" != "null" ]]; then
 fi
 if [[ "$FEEDBACK_IMAGE_YAML" != "null" ]]; then
   echo "🖼️  Image:       $FEEDBACK_IMAGE"
+fi
+if [[ "$FEEDBACK_AGENT_YAML" != "null" ]]; then
+  echo "🧑‍💼 Agent:       $FEEDBACK_AGENT"
 fi
 if [[ "$MODEL_YAML" != "null" ]]; then
   echo "🤖 Model:       $MODEL"
