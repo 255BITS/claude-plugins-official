@@ -145,17 +145,34 @@ def main():
 
     # Convert absolute paths to relative paths for save_files
     # (load_project_files returns absolute paths, save_files expects relative)
+    # Also filter to only allow files within target_dir (prevent writes outside scope)
     relative_files = {}
+    skipped_files = []
     for path, content in updated_files.items():
         if os.path.isabs(path):
             try:
                 rel_path = os.path.relpath(path, target_dir)
+                # Skip files that would be outside target_dir (e.g., ../foo)
+                if rel_path.startswith('..'):
+                    skipped_files.append(path)
+                    continue
                 relative_files[rel_path] = content
             except ValueError:
-                # If path can't be made relative, use as-is
-                relative_files[path] = content
+                skipped_files.append(path)
+                continue
         else:
+            # For relative paths, also check they don't escape
+            if path.startswith('..'):
+                skipped_files.append(path)
+                continue
             relative_files[path] = content
+
+    if skipped_files:
+        print(f"⚠️  Skipped {len(skipped_files)} files outside target directory:", file=sys.stderr)
+        for f in skipped_files[:5]:
+            print(f"   - {f}", file=sys.stderr)
+        if len(skipped_files) > 5:
+            print(f"   ... and {len(skipped_files) - 5} more", file=sys.stderr)
 
     try:
         save_files(relative_files, target_dir)

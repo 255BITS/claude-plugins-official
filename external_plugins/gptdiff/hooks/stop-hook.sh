@@ -360,9 +360,10 @@ $GOAL
 
 ### Instructions
 1. **Read** the files in \`$TARGET_DIR\` (listed below)
-2. **Make ONE coherent improvement** - keep changes small and reviewable
-3. **Use Edit tool** to apply your changes directly to the files
-4. **Preserve** existing structure and intent; avoid unnecessary rewrites
+2. **ONLY modify files in \`$TARGET_DIR\`** - do NOT edit files outside this directory
+3. **Make ONE coherent improvement** - keep changes small and reviewable
+4. **Use Edit tool** to apply your changes directly to the files
+5. **Preserve** existing structure and intent; avoid unnecessary rewrites
 
 ### Files in scope (respecting .gptignore)
 \`\`\`
