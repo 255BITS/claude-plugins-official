@@ -29,7 +29,7 @@ Help the user configure the loop interactively:
      - "External LLM" - Uses gptdiff API with model: ${GPTDIFF_MODEL:-google/gemini-3-flash-preview-thinking}
      - "Claude Code" - Uses Claude's own inference (no external API needed)
    - **If NOT set**: Inform them it will use Claude Code mode.
-     - Mention they can set `GPTDIFF_LLM_API_KEY` for external LLM (supports OpenRouter, OpenAI-compatible APIs, etc.)
+     - Mention they can set `GPTDIFF_LLM_API_KEY` for external LLM via nano-gpt.com (set `GPTDIFF_BASE_URL=https://nano-gpt.com/api/v1`)
 
 3. **Discover the project structure**:
    ```bash
