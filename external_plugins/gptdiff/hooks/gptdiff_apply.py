@@ -8,6 +8,8 @@ Uses the gptdiff Python API instead of the CLI to generate and apply diffs.
 import argparse
 import os
 import sys
+import threading
+import time
 
 try:
     from gptdiff import (
@@ -74,9 +76,21 @@ def main():
     if args.verbose:
         print(f"Environment size: {len(environment)} chars", file=sys.stderr)
 
-    # Generate diff
-    if args.verbose:
-        print("Generating diff...", file=sys.stderr)
+    # Generate diff with heartbeat to prevent timeout
+    print("📤 Sending to LLM...", file=sys.stderr)
+    sys.stderr.flush()
+
+    # Heartbeat thread to show progress during long LLM calls
+    stop_heartbeat = threading.Event()
+    def heartbeat():
+        dots = 0
+        while not stop_heartbeat.wait(5):  # Every 5 seconds
+            dots += 1
+            print(f"   ...waiting ({dots * 5}s)", file=sys.stderr)
+            sys.stderr.flush()
+
+    heartbeat_thread = threading.Thread(target=heartbeat, daemon=True)
+    heartbeat_thread.start()
 
     try:
         diff_kwargs = {
@@ -87,7 +101,10 @@ def main():
             diff_kwargs["model"] = args.model
 
         diff_text = generate_diff(**diff_kwargs)
+        stop_heartbeat.set()
+        print("📥 Response received", file=sys.stderr)
     except Exception as e:
+        stop_heartbeat.set()
         print(f"Error generating diff: {e}", file=sys.stderr)
         sys.exit(1)
 

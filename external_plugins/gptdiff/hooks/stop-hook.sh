@@ -233,6 +233,9 @@ if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
     echo "----- gptdiff output -----"
   } >> "$GPTDIFF_LOG"
 
+  # Run gptdiff with progress indicator to prevent timeout
+  echo "🔄 Calling external LLM (this may take 1-2 minutes)..." >&2
+
   set +e
   (
     cd "$TARGET_ABS" || exit 127
@@ -241,8 +244,8 @@ if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
     else
       python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" --verbose "$GPTDIFF_GOAL"
     fi
-  ) >> "$GPTDIFF_LOG" 2>&1
-  GPTDIFF_EXIT=$?
+  ) 2>&1 | tee -a "$GPTDIFF_LOG" >&2
+  GPTDIFF_EXIT=${PIPESTATUS[0]}
   set -e
   echo "" >> "$GPTDIFF_LOG"
   echo "gptdiff exit: $GPTDIFF_EXIT" >> "$GPTDIFF_LOG"
