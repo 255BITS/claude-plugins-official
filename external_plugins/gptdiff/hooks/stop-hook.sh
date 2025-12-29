@@ -296,13 +296,14 @@ if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
   # Run gptdiff in background to avoid hook timeout
   PENDING_FILE="$LOOP_DIR/pending"
   RESULT_FILE="$LOOP_DIR/result"
+  EXTERNAL_LLM_PENDING="false"
 
   # Check if previous background job is still running
   if [[ -f "$PENDING_FILE" ]]; then
     PID=$(cat "$PENDING_FILE" 2>/dev/null)
     if kill -0 "$PID" 2>/dev/null; then
       echo "⏳ External LLM still processing (PID $PID)..." >&2
-      # Return without blocking - will check again on next stop
+      EXTERNAL_LLM_PENDING="true"
       GPTDIFF_EXIT=0
     else
       # Previous job finished, check result
@@ -342,6 +343,7 @@ if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
     BACKGROUND_PID=$!
     echo "$BACKGROUND_PID" > "$PENDING_FILE"
     echo "   PID: $BACKGROUND_PID - check /status or wait for next iteration" >&2
+    EXTERNAL_LLM_PENDING="true"
     GPTDIFF_EXIT=0
   fi
 else
@@ -368,11 +370,15 @@ else
   echo "(not a git repo)" > "$STATUS_FILE"
 fi
 
-# Bump iteration in state file
-NEXT_ITERATION=$((ITERATION + 1))
-TEMP_FILE="${STATE_FILE}.tmp.$$"
-sed "s/^iteration: .*/iteration: $NEXT_ITERATION/" "$STATE_FILE" > "$TEMP_FILE"
-mv "$TEMP_FILE" "$STATE_FILE"
+# Bump iteration in state file (only if not waiting for external LLM)
+if [[ "${EXTERNAL_LLM_PENDING:-false}" != "true" ]]; then
+  NEXT_ITERATION=$((ITERATION + 1))
+  TEMP_FILE="${STATE_FILE}.tmp.$$"
+  sed "s/^iteration: .*/iteration: $NEXT_ITERATION/" "$STATE_FILE" > "$TEMP_FILE"
+  mv "$TEMP_FILE" "$STATE_FILE"
+else
+  NEXT_ITERATION=$ITERATION
+fi
 
 # Build progress indicator
 if [[ $MAX_ITERATIONS -gt 0 ]]; then
@@ -408,8 +414,29 @@ CHANGED_FILES_PREVIEW="$(tail -n 40 "$CHANGED_FILES_FILE" 2>/dev/null || true)"
 DIFFSTAT_PREVIEW="$(tail -n 80 "$DIFFSTAT_FILE" 2>/dev/null || true)"
 
 # Build the prompt based on inference mode
-if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
-  # External LLM mode: gptdiff already made changes, just summarize
+if [[ "$USE_EXTERNAL_LLM" == "true" ]] && [[ "${EXTERNAL_LLM_PENDING:-false}" == "true" ]]; then
+  # External LLM is still processing - ask Claude to wait
+  REASON_PROMPT="
+╔══════════════════════════════════════════════════════════════════╗
+║  ⏳ GPTDIFF LOOP - WAITING FOR EXTERNAL LLM                      ║
+╚══════════════════════════════════════════════════════════════════╝
+
+**Mode:** External LLM (gptdiff)
+**Targets:** \`$TARGETS_DISPLAY\`
+**Progress:** $ITER_INFO (iteration not advanced while waiting)
+
+The external LLM is still processing. This can take a few minutes.
+
+You can:
+- **Wait** and reply with 'ok' to check again
+- **Check logs**: \`tail -50 $GPTDIFF_LOG\`
+- **Cancel**: \`/stop\` to end the loop
+
+---
+
+**Reply with 'ok' to check if the external LLM has finished.**"
+elif [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
+  # External LLM mode: gptdiff already made changes, review and act
   REASON_PROMPT="$BASE_PROMPT
 
 ╔══════════════════════════════════════════════════════════════════╗
