@@ -1,8 +1,7 @@
 #!/bin/bash
 
 # GPTDiff Loop Setup Script
-# - scaffolds the target dir (so it has .gptignore + interface contract)
-# - writes .claude/gptdiff-loop.local.md (state consumed by stop hook)
+# Writes .claude/gptdiff-loop.local.md (state consumed by stop hook)
 
 set -euo pipefail
 
@@ -16,38 +15,29 @@ USAGE:
 OPTIONS:
   --dir PATH                   Target subdirectory to work on (required)
   --goal TEXT                  Goal prompt for GPTDiff (required)
-  --template NAME              generic | game-world (default: generic)
-  --max-iterations N           Stop after N iterations (default: 10, 0 = unlimited)
-  --eval-cmd CMD               Optional evaluator command (signals only; never gates stop)
-  --cmd CMD                    Optional verification command (runs each iteration for feedback)
+  --max-iterations N           Stop after N iterations (default: 3, 0 = unlimited)
+  --eval-cmd CMD               Optional evaluator command (signals only)
+  --cmd CMD                    Optional verification command (runs each iteration)
   --model MODEL                Optional GPTDiff model override
-  --overwrite-scaffold          Overwrite .gptignore / INTERFACE.md / RUBRIC.md in target dir
   -h, --help                   Show help
 
 EXAMPLES:
-  /gptdiff-loop --dir items --template game-world \
-    --goal "Improve item fun + variety. Add or revise 1–3 items per iteration. Use INTERFACE.md and RUBRIC.md." \
-    --max-iterations 12
+  /gptdiff-loop --dir src \
+    --goal "Improve code quality and add tests." \
+    --max-iterations 5
 
-  /gptdiff-loop --dir items --template game-world \
-    --goal "Balance tiers; reduce outliers; keep identity." \
-    --eval-cmd "python3 tools/eval_items.py" \
-    --max-iterations 10
-
-  /gptdiff-loop --dir items --template generic \
-    --goal "Fix validation failures without weakening rules." \
-    --cmd "python3 -m pytest -q" \
-    --max-iterations 20
+  /gptdiff-loop --dir src \
+    --goal "Fix bugs and improve error handling." \
+    --cmd "npm run build" \
+    --max-iterations 3
 HELP_EOF
 }
 TARGET_DIR=""
 GOAL=""
-TEMPLATE="generic"
 MAX_ITERATIONS="3"
 EVAL_CMD="null"
 CMD="null"
 MODEL="null"
-OVERWRITE="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -61,10 +51,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --goal)
       GOAL="${2:-}"
-      shift 2
-      ;;
-    --template)
-      TEMPLATE="${2:-}"
       shift 2
       ;;
     --max-iterations)
@@ -82,10 +68,6 @@ while [[ $# -gt 0 ]]; do
     --model)
       MODEL="${2:-}"
       shift 2
-      ;;
-    --overwrite-scaffold)
-      OVERWRITE="true"
-      shift
       ;;
     *)
       echo "❌ Unknown argument: $1" >&2
@@ -105,14 +87,6 @@ if [[ -z "$GOAL" ]]; then
   exit 1
 fi
 
-case "$TEMPLATE" in
-  generic|game-world) ;;
-  *)
-    echo "❌ Error: --template must be 'generic' or 'game-world' (got: $TEMPLATE)" >&2
-    exit 1
-    ;;
-esac
-
 if ! [[ "$MAX_ITERATIONS" =~ ^[0-9]+$ ]]; then
   echo "❌ Error: --max-iterations must be an integer (0 = unlimited), got: $MAX_ITERATIONS" >&2
   exit 1
@@ -122,14 +96,6 @@ if ! python3 -c "import gptdiff" 2>/dev/null; then
   echo "❌ Error: 'gptdiff' Python package not found. Install with: pip install gptdiff" >&2
   exit 1
 fi
-
-# Scaffold target directory (creates .gptignore + interface contract)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCAFFOLD_ARGS=(--dir "$TARGET_DIR" --template "$TEMPLATE")
-if [[ "$OVERWRITE" == "true" ]]; then
-  SCAFFOLD_ARGS+=(--overwrite)
-fi
-"$SCRIPT_DIR/scaffold-loop-dir.sh" "${SCAFFOLD_ARGS[@]}"
 
 mkdir -p .claude
 
@@ -142,7 +108,6 @@ yaml_escape() {
 
 TARGET_DIR_ESC="$(yaml_escape "$TARGET_DIR")"
 GOAL_ESC="$(yaml_escape "$GOAL")"
-TEMPLATE_ESC="$(yaml_escape "$TEMPLATE")"
 
 if [[ -n "${EVAL_CMD:-}" ]] && [[ "$EVAL_CMD" != "null" ]]; then
   EVAL_CMD_ESC="$(yaml_escape "$EVAL_CMD")"
@@ -172,7 +137,6 @@ iteration: 1
 max_iterations: $MAX_ITERATIONS
 target_dir: "$TARGET_DIR_ESC"
 goal: "$GOAL_ESC"
-template: "$TEMPLATE_ESC"
 eval_cmd: $EVAL_CMD_YAML
 cmd: $CMD_YAML
 model: $MODEL_YAML
@@ -193,7 +157,6 @@ cat <<EOF
 
 📁 Target:      $TARGET_DIR/
 🎯 Goal:        $GOAL
-📋 Template:    $TEMPLATE
 🔄 Iterations:  $(if [[ "$MAX_ITERATIONS" -gt 0 ]]; then echo "1 of $MAX_ITERATIONS"; else echo "unlimited"; fi)
 EOF
 

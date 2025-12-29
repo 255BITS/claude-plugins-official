@@ -67,7 +67,6 @@ ITERATION="$(strip_yaml_quotes "$(yaml_get_raw iteration)")"
 MAX_ITERATIONS="$(strip_yaml_quotes "$(yaml_get_raw max_iterations)")"
 TARGET_DIR="$(yaml_unescape "$(strip_yaml_quotes "$(yaml_get_raw target_dir)")")"
 GOAL="$(yaml_unescape "$(strip_yaml_quotes "$(yaml_get_raw goal)")")"
-TEMPLATE="$(yaml_unescape "$(strip_yaml_quotes "$(yaml_get_raw template)")")"
 CMD_RAW="$(yaml_get_raw cmd)"
 EVAL_CMD_RAW="$(yaml_get_raw eval_cmd)"
 MODEL_RAW="$(yaml_get_raw model)"
@@ -80,7 +79,6 @@ MODEL="$(yaml_unescape "$(strip_yaml_quotes "$MODEL_RAW")")"
 if [[ "${CMD_RAW:-}" == "null" ]] || [[ -z "${CMD:-}" ]]; then CMD=""; fi
 if [[ "${EVAL_CMD_RAW:-}" == "null" ]] || [[ -z "${EVAL_CMD:-}" ]]; then EVAL_CMD=""; fi
 if [[ "${MODEL_RAW:-}" == "null" ]] || [[ -z "${MODEL:-}" ]]; then MODEL=""; fi
-if [[ -z "${TEMPLATE:-}" ]] || [[ "${TEMPLATE:-}" == "null" ]]; then TEMPLATE="generic"; fi
 
 # Validate numeric fields
 if [[ ! "$ITERATION" =~ ^[0-9]+$ ]]; then
@@ -203,17 +201,14 @@ fi
 # Build the goal prompt for the LLM (used by both modes)
 GPTDIFF_GOAL="Iteration: $ITERATION / $(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "unlimited"; fi)
 Target directory: $TARGET_DIR
-Template: $TEMPLATE
 
 GOAL:
 $GOAL
 
 CONSTRAINTS:
-- Follow INTERFACE.md in this directory as the contract.
-- If RUBRIC.md exists, use it to guide improvements.
 - Make one coherent, meaningful improvement per iteration (small, reviewable diffs).
 - Preserve existing intent and structure; avoid unnecessary rewrites.
-- Do not add broken JSON/YAML/Markdown; keep ids stable and avoid duplicates.
+- Keep changes focused and reviewable.
 
 SIGNALS (optional):
 --- eval (tail) ---
@@ -356,18 +351,15 @@ You are running an iterative improvement loop on a subdirectory.
 ### Task
 **Target directory:** \`$TARGET_DIR\`
 **Progress:** $ITER_INFO
-**Template:** $TEMPLATE
 
 ### Goal
 $GOAL
 
 ### Instructions
 1. **Read** the files in \`$TARGET_DIR\` (listed below)
-2. **Follow** INTERFACE.md as the contract for this directory
-3. **Check** RUBRIC.md if it exists for quality guidance
-4. **Make ONE coherent improvement** - keep changes small and reviewable
-5. **Use Edit tool** to apply your changes directly to the files
-6. **Preserve** existing structure and intent; avoid unnecessary rewrites
+2. **Make ONE coherent improvement** - keep changes small and reviewable
+3. **Use Edit tool** to apply your changes directly to the files
+4. **Preserve** existing structure and intent; avoid unnecessary rewrites
 
 ### Files in scope (respecting .gptignore)
 \`\`\`

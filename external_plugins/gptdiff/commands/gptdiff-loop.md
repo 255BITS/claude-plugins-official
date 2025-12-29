@@ -1,6 +1,6 @@
 ---
-description: "Start a GPTDiff-powered agent loop on a subdirectory (scaffold + iterate)"
-argument-hint: "--dir PATH [--template generic|game-world] [--goal '...'] [--max-iterations N] [--eval-cmd '...'] [--cmd '...'] [--model MODEL] [--overwrite-scaffold]"
+description: "Start a GPTDiff-powered agent loop on a subdirectory"
+argument-hint: "--dir PATH --goal '...' [--max-iterations N] [--cmd '...'] [--eval-cmd '...'] [--model MODEL]"
 allowed-tools: ["Bash", "Glob", "Read", "AskUserQuestion"]
 ---
 

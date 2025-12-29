@@ -2,102 +2,38 @@
 description: "Explain GPTDiff agent loop plugin and available commands"
 ---
 
-# GPTDiff Agent Loop Plugin Help
+# GPTDiff Loop Plugin
 
-This plugin is built to showcase **agent loops** powered by **GPTDiff**:
+Run iterative improvement loops on a directory:
 
-- Pick a **target directory** (e.g. `items/`)
+- Pick a **target directory** (e.g. `src/`)
 - Give a **goal**
-- Iterate N times
-- Optionally run an **evaluator** or **verification command**
+- Iterate N times (default: 3)
+- Optionally run a **verification command** each iteration
 - Review the final diffs
-
-It’s “Ralph-style looping” but the work engine is **`gptdiff --apply`**, repeatedly.
-
-## Mental model
-
-Each iteration is:
-
-1. (Optional) run `--eval-cmd` to generate signals (metrics/logs)
-2. (Optional) run `--cmd` for verification/feedback
-3. run `gptdiff --apply` to make one coherent improvement
-4. repeat
-
-The big win is **convergence**: you can run:
-- “make it more fun” loops
-- “balance” loops
-- “add variety” loops
-- “polish docs/consistency” loops
-
-…without expecting a single-shot perfect output.
 
 ## Commands
 
-### /gptdiff-scaffold
-
-Create `.gptignore` + interface files in a subdirectory.
-
-**Example (game content):**
-```
-+/gptdiff-scaffold --dir items --template game-world
-```
-
 ### /gptdiff-loop
 
-Start the loop (Stop hook repeatedly runs `gptdiff --apply`).
+Start the loop. Run without arguments for interactive setup.
 
-**Example (creative improvement loop):**
+**Examples:**
 ```
-+/gptdiff-loop --dir items --template game-world \
-  --goal "Improve item variety and fun. Add or revise 1–3 items per iteration. Follow INTERFACE.md and RUBRIC.md." \
-  --max-iterations 12
-```
+/gptdiff-loop --dir src --goal "Improve code quality" --max-iterations 5
 
-**Example (with evaluator):**
-```
-+/gptdiff-loop --dir items --template game-world \
-  --goal "Balance tiers; reduce outliers; keep identity." \
-  --eval-cmd "python3 tools/eval_items.py" \
-  --max-iterations 10
-```
-
-**Example (with verification command):**
-```
-+/gptdiff-loop --dir items --template generic \
-  --goal "Fix content validation failures without weakening rules." \
-  --cmd "python3 -m pytest -q" \
-  --max-iterations 20
+/gptdiff-loop --dir src --goal "Fix bugs" --cmd "npm run build" --max-iterations 3
 ```
 
 ### /gptdiff-status
 
-Check the current loop progress:
-- Iteration count with visual progress bar
-- Target directory and goal
-- Recent file changes
+Check the current loop progress (iteration count, goal, recent changes).
 
 ### /cancel-gptdiff-loop
 
-Stops the current loop by removing its state file.
+Stop the current loop.
 
-## Templates
-
-- `generic` — a general “domain workspace interface”
-- `game-world` — a flexible interface for game content (items/interactions/balance) without hardcoding a specific engine
-
-## Logs & state
+## Logs
 
 - State: `.claude/gptdiff-loop.local.md`
-- Logs: `.claude/gptdiff-loop/<target-slug>/`
-
-If you want to see what happened:
-- `.claude/gptdiff-loop/<target-slug>/gptdiff.log`
-- `.claude/gptdiff-loop/<target-slug>/diffstat.txt`
-- `.claude/gptdiff-loop/<target-slug>/changed-files.txt`
-
-## Best practices
-
-- Use a branch.
-- Keep iteration budgets small.
-- Use an evaluator when possible (it’s the best way to “steer” loops).
-- Put your “interface contract” in the directory (`INTERFACE.md`) and evolve it over time.
+- Logs: `.claude/gptdiff-loop/<target>/`
