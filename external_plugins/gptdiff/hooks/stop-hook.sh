@@ -473,6 +473,7 @@ The external LLM made the changes above. You may now:
 **Review the changes, run any appropriate commands, then reply with a brief summary.**"
 else
   # Claude Code mode: ask Claude Code to make the improvements
+  # Claude Code can explore the codebase itself - no need to constrain to specific files
   REASON_PROMPT="
 ╔══════════════════════════════════════════════════════════════════╗
 ║  🔁 GPTDIFF LOOP - ITERATION $ITERATION of $(printf "%-3s" "$(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "∞"; fi)")                          ║
@@ -480,38 +481,28 @@ else
 
 You are running an iterative improvement loop.
 
-### Task
-**Targets:** \`$TARGETS_DISPLAY\`
-**Progress:** $ITER_INFO
-
 ### Goal
 $GOAL
 
+### Progress
+$ITER_INFO
+
 ### Instructions
-1. **Read** the files listed below
-2. **ONLY modify files in the specified targets** - do NOT edit files outside these paths
-3. **Make ONE coherent improvement** - keep changes small and reviewable
-4. **Use Edit tool** to apply your changes directly to the files
-5. **Preserve** existing structure and intent; avoid unnecessary rewrites
-6. **Between iterations, you may run commands** based on the current state:
-   - Commit changes: \`git add . && git commit -m "..."\`
-   - Run tests or linters to verify your changes
-   - Any other commands that help maintain quality
+1. **Explore** the codebase to find relevant files
+2. **Make ONE coherent improvement** - keep changes small and reviewable
+3. **Preserve** existing structure and intent; avoid unnecessary rewrites
+4. **Run commands** as needed:
+   - Commit changes: \`git add . && git commit -m \"...\"\`
+   - Run tests or linters to verify
+   - Any other maintenance commands
 
-### Files in scope (respecting .gptignore)
-\`\`\`
-$FILE_LIST
-\`\`\`
+$(if [[ -n "$EVAL_TAIL" ]]; then echo "### Signals from evaluators"; echo '```'; echo "$EVAL_TAIL"; echo '```'; fi)
 
-### Signals from evaluators
-$(if [[ -n "$EVAL_TAIL" ]]; then echo "**Eval output (tail):**"; echo '```'; echo "$EVAL_TAIL"; echo '```'; else echo "_No eval command configured_"; fi)
-
-### Recent changes
-$(if [[ -n "$CHANGED_FILES_PREVIEW" ]]; then echo '```'; echo "$CHANGED_FILES_PREVIEW"; echo '```'; else echo "_No changes yet_"; fi)
+$(if [[ -n "$CHANGED_FILES_PREVIEW" ]]; then echo "### Recent changes"; echo '```'; echo "$CHANGED_FILES_PREVIEW"; echo '```'; fi)
 
 ---
 
-**Now read the files, make ONE improvement, then reply with a brief summary of what you changed.**"
+**Make ONE improvement toward the goal, then reply with a brief summary.**"
 fi
 
 # Block stop and feed prompt back
