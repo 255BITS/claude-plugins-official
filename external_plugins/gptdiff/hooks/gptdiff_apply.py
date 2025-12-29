@@ -126,8 +126,22 @@ def main():
     if args.verbose:
         print("Saving files...", file=sys.stderr)
 
+    # Convert absolute paths to relative paths for save_files
+    # (load_project_files returns absolute paths, save_files expects relative)
+    relative_files = {}
+    for path, content in updated_files.items():
+        if os.path.isabs(path):
+            try:
+                rel_path = os.path.relpath(path, target_dir)
+                relative_files[rel_path] = content
+            except ValueError:
+                # If path can't be made relative, use as-is
+                relative_files[path] = content
+        else:
+            relative_files[path] = content
+
     try:
-        save_files(updated_files, target_dir)
+        save_files(relative_files, target_dir)
     except Exception as e:
         print(f"Error saving files: {e}", file=sys.stderr)
         sys.exit(1)
