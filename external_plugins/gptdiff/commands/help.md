@@ -65,7 +65,15 @@ Both text and image feedback work together - use both for rich feedback loops.
 
 Supported image formats: PNG, JPEG, GIF, WebP
 
-When no feedback options are provided (in Claude Code mode), Claude is prompted to run tools itself to gather feedback.
+## Auto-Detected Feedback Images
+
+Claude can save images to a known path, and the loop will automatically include them:
+
+- **Path**: `.claude/start/<slug>/feedback-image.png` (or .jpg/.gif/.webp)
+- **Auto-detection**: Always enabled - images found here are included in next iteration
+- **Works with both modes**: Claude Code and external LLMs
+
+This lets Claude decide what feedback to gather without pre-configuring commands.
 
 ## Logs
 

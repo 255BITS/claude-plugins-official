@@ -92,9 +92,9 @@ Use `--feedback-image` to include a screenshot or visual output in each iteratio
 
 Supported image formats: PNG, JPEG, GIF, WebP
 
-### 6) Free exploration mode (no feedback command)
+### 6) Claude-driven feedback (let Claude decide)
 
-When no `--feedback-cmd` is provided in Claude Code mode, Claude is prompted to run tools itself to evaluate progress:
+When no explicit feedback is configured, Claude is prompted to gather feedback itself AND can persist images for the next iteration:
 
 ```bash
 /start --dir game/content \
@@ -106,7 +106,15 @@ Claude will be instructed to:
 - Take screenshots if working on UI
 - Run simulations if working on game logic
 - Execute test suites to verify correctness
-- Use any tools that help assess the impact of changes
+- **Save feedback images** to `.claude/start/<slug>/feedback-image.png`
+
+The loop **automatically detects** any images saved to the feedback path and includes them in the next iteration. This means Claude can:
+1. Make code changes
+2. Take a screenshot or generate a visualization
+3. Save it to the feedback path
+4. The next iteration sees the image automatically
+
+This works with both Claude Code and external LLMs - no configuration needed!
 
 ## Why subdirectory loops?
 

@@ -341,10 +341,17 @@ if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
     if [[ -n "$MODEL" ]]; then
       APPLY_ARGS+=" --model \"$MODEL\""
     fi
-    # Add feedback image if it exists
+    # Add feedback images - both explicit and auto-detected
     if [[ -n "$FEEDBACK_IMAGE" ]] && [[ -f "$FEEDBACK_IMAGE" ]]; then
       APPLY_ARGS+=" --image \"$FEEDBACK_IMAGE\""
     fi
+    # Auto-detect Claude-saved feedback images
+    for ext in png jpg jpeg gif webp; do
+      AUTO_IMAGE="$LOOP_DIR/feedback-image.$ext"
+      if [[ -f "$AUTO_IMAGE" ]] && [[ "$AUTO_IMAGE" != "$FEEDBACK_IMAGE" ]]; then
+        APPLY_ARGS+=" --image \"$AUTO_IMAGE\""
+      fi
+    done
     while IFS= read -r dir; do
       [[ -z "$dir" ]] && continue
       APPLY_ARGS+=" --dir \"$ROOT_DIR/$dir\""
@@ -541,28 +548,51 @@ $FEEDBACK_TAIL
 "
   fi
 
-  # Build image section if feedback image exists
+  # Build image section - check both explicit --feedback-image AND auto-detected Claude-saved images
   IMAGE_SECTION=""
+  ALL_FEEDBACK_IMAGES=()
+
+  # Add explicit feedback image if set
   if [[ -n "$FEEDBACK_IMAGE" ]] && [[ -f "$FEEDBACK_IMAGE" ]]; then
+    ALL_FEEDBACK_IMAGES+=("$FEEDBACK_IMAGE")
+  fi
+
+  # Auto-detect Claude-saved feedback images in the loop directory
+  # Convention: Claude can save images to .claude/start/<slug>/feedback-image.{png,jpg,jpeg,gif,webp}
+  for ext in png jpg jpeg gif webp; do
+    AUTO_IMAGE="$LOOP_DIR/feedback-image.$ext"
+    if [[ -f "$AUTO_IMAGE" ]]; then
+      # Avoid duplicates
+      if [[ ! " ${ALL_FEEDBACK_IMAGES[*]} " =~ " ${AUTO_IMAGE} " ]]; then
+        ALL_FEEDBACK_IMAGES+=("$AUTO_IMAGE")
+      fi
+    fi
+  done
+
+  # Build image section from all found images
+  if [[ ${#ALL_FEEDBACK_IMAGES[@]} -gt 0 ]]; then
     IMAGE_SECTION="### 🖼️ Visual Feedback
-**IMPORTANT:** Read the image file to see the current state:
+**IMPORTANT:** Read the image file(s) to see the current state:
+"
+    for img in "${ALL_FEEDBACK_IMAGES[@]}"; do
+      IMAGE_SECTION+="\`\`\`
+$img
 \`\`\`
-$FEEDBACK_IMAGE
-\`\`\`
-Use your Read tool on this image file to view it before making changes.
+"
+    done
+    IMAGE_SECTION+="Use your Read tool on these image files to view them before making changes.
 
 "
   fi
 
-  # Build exploration instruction based on whether feedback_cmd is set
-  EXPLORATION_INSTRUCTION=""
-  if [[ -z "$FEEDBACK_CMD" ]] && [[ -z "$FEEDBACK_IMAGE" ]]; then
-    EXPLORATION_INSTRUCTION="5. **Gather feedback** - After making changes, run tools to evaluate progress:
-   - Take screenshots if working on UI
-   - Run simulations if working on game logic
+  # Build exploration instruction - always encourage feedback gathering
+  # Tell Claude about the image save convention
+  EXPLORATION_INSTRUCTION="5. **Gather feedback** - After making changes, run tools to evaluate progress:
+   - Take screenshots if working on UI/visual elements
+   - Run simulations or tests if working on logic
    - Execute test suites to verify correctness
-   - Use any tools that help assess the impact of your changes"
-  fi
+   - **To persist images for next iteration**: Save to \`$LOOP_DIR/feedback-image.png\`
+     (The loop will automatically include this image in the next iteration)"
 
   REASON_PROMPT="
 ╔══════════════════════════════════════════════════════════════════╗
@@ -585,7 +615,7 @@ $ITER_INFO
    - Commit changes: \`git add . && git commit -m \"...\"\`
    - Run tests or linters to verify
    - Any other maintenance commands
-$(if [[ -n "$EXPLORATION_INSTRUCTION" ]]; then echo "$EXPLORATION_INSTRUCTION"; fi)
+$EXPLORATION_INSTRUCTION
 
 ${IMAGE_SECTION}${FEEDBACK_SECTION}$(if [[ -n "$EVAL_TAIL" ]]; then echo "### Signals from evaluators"; echo '```'; echo "$EVAL_TAIL"; echo '```'; echo ""; fi)
 
