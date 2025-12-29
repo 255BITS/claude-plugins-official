@@ -2,7 +2,7 @@
 
 This plugin is for **iterating** with GPTDiff — not doing a task once, but doing it *many times* to converge on a better result.
 
-It's intentionally modeled after the **Ralph Wiggum** example plugin's "loop-in-session" behavior, but instead of making the assistant implement everything directly, it drives **gptdiff's Python API** repeatedly against a **single focused directory**.
+It's intentionally modeled after the **Ralph Wiggum** example plugin's "loop-in-session" behavior. It makes iterative improvements to a **single focused directory**, using either Claude Code's own inference (default) or an external LLM via gptdiff's API.
 
 ## What you get
 
@@ -15,7 +15,7 @@ When you start a loop with `/gptdiff-loop`:
 2. A **Stop hook** runs the agent loop:
    - Runs optional `--eval-cmd` (signals/metrics/logs)
    - Runs optional `--cmd` (a hard gate; stops when it passes)
-   - Uses gptdiff's Python API (`generate_diff` + `smartapply`) with your goal
+   - Makes improvements via **Claude Code** (default) or **external LLM** (if `GPTDIFF_LLM_API_KEY` is set)
    - Repeats until `--max-iterations` is reached (or `--cmd` succeeds)
 
 This pattern is ideal for “make it better” loops (fun/balance/variety/polish) where you want iterative refinement, not a single-shot answer.
@@ -77,7 +77,7 @@ Each loop is the same mechanism — just a different goal prompt and (optionally
 ## Commands
 
 - `/gptdiff-scaffold` — create `.gptignore` + interface files in a target directory
-- `/gptdiff-loop` — start a loop that repeatedly runs gptdiff via Python API
+- `/gptdiff-loop` — start an iterative improvement loop (Claude Code makes the changes)
 - `/cancel-gptdiff-loop` — stop the current loop (removes state file)
 - `/gptdiff-help` — explanation and examples
 
@@ -98,6 +98,42 @@ This plugin includes a `PreToolUse` hook that auto-approves bash commands for th
 - `/gptdiff-loop` and `/gptdiff-scaffold` run without manual permission prompts
 - The hook only approves commands that match the plugin's script paths
 - All other bash commands follow normal Claude Code permission rules
+
+## Inference modes
+
+The plugin supports two inference modes:
+
+### Claude Code mode (default)
+
+When `GPTDIFF_LLM_API_KEY` is **not set**, the plugin uses Claude Code's own inference:
+
+1. The Stop hook gathers context (files, eval output, goal)
+2. It constructs a prompt asking Claude Code to make improvements
+3. Claude Code reads the files using its Read tool
+4. Claude Code makes changes using its Edit/Write tools
+5. The loop repeats with the next iteration
+
+**Benefits:**
+- No separate API keys needed (uses your Claude Code session)
+- Full context awareness (Claude Code sees the whole conversation)
+- Native tool usage (Edit, Write, Bash) for precise changes
+
+### External LLM mode
+
+When `GPTDIFF_LLM_API_KEY` **is set**, the plugin uses gptdiff's Python API to call an external LLM:
+
+```bash
+export GPTDIFF_LLM_API_KEY="your-api-key"
+export GPTDIFF_MODEL="deepseek-reasoner"  # optional
+export GPTDIFF_LLM_BASE_URL="https://api.anthropic.com"  # optional, for Claude API
+```
+
+**Benefits:**
+- Use cheaper/faster models for iterations
+- Offload inference to external provider
+- Supports any OpenAI-compatible API (including Anthropic, nano-gpt, etc.)
+
+Both modes use gptdiff's `.gptignore` patterns for file discovery.
 
 ## Notes
 

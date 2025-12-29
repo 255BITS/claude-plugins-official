@@ -2,16 +2,17 @@
 
 # GPTDiff Stop Hook
 #
-# Implements an in-session agent loop that repeatedly runs:
-#   - optional eval command (signals/metrics)
-#   - optional hard-gate command (stop when it passes)
-#   - gptdiff --apply (iterative improvement)
+# Implements an in-session agent loop that:
+#   - runs optional eval command (signals/metrics)
+#   - runs optional hard-gate command (stop when it passes)
+#   - makes improvements via LLM (external or Claude Code)
 #
 # The loop is activated by /gptdiff-loop which creates:
 #   .claude/gptdiff-loop.local.md
 #
-# This hook is intentionally "Ralph-adjacent": it blocks Stop and feeds a short
-# prompt back each iteration so the user can watch progress.
+# Inference mode:
+#   - If GPTDIFF_LLM_API_KEY is set: uses external LLM via gptdiff Python API
+#   - Otherwise: uses Claude Code's own inference (no API key needed)
 
 set -euo pipefail
 
@@ -32,14 +33,14 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
 
-# Check that Python and gptdiff package are available
+# Check that Python and gptdiff package are available (for file loading utilities)
 if ! python3 -c "import gptdiff" 2>/dev/null; then
   echo "⚠️  GPTDiff loop: 'gptdiff' Python package not found. Install with: pip install gptdiff" >&2
   rm -f "$STATE_FILE"
   exit 0
 fi
 
-# Get the plugin hooks directory (where this script and gptdiff_apply.py live)
+# Get the plugin hooks directory
 PLUGIN_HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Parse YAML frontmatter (YAML between --- markers)
@@ -181,8 +182,7 @@ if [[ -n "$CMD" ]]; then
   fi
 fi
 
-# Build the GPTDiff goal prompt.
-# The interface files live inside the target directory (scaffolded), so GPTDiff sees them.
+# Build the goal prompt with eval/cmd signals
 EVAL_TAIL=""
 if [[ -f "$EVAL_LOG" ]]; then
   EVAL_TAIL="$(tail -n 80 "$EVAL_LOG" | sed 's/\r$//')"
@@ -193,9 +193,20 @@ if [[ -f "$CMD_LOG" ]]; then
   CMD_TAIL="$(tail -n 80 "$CMD_LOG" | sed 's/\r$//')"
 fi
 
-GPTDIFF_PROMPT="You are running an iterative GPTDiff agent loop.
+# Get list of files in target directory (using gptdiff's .gptignore-aware loader)
+FILE_LIST=""
+set +e
+FILE_LIST="$(python3 "$PLUGIN_HOOKS_DIR/prepare_context.py" --dir "$TARGET_ABS" --list-only 2>/dev/null)"
+set -e
 
-Iteration: $ITERATION / $(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "unlimited"; fi)
+# Determine inference mode: external LLM or Claude Code
+USE_EXTERNAL_LLM="false"
+if [[ -n "${GPTDIFF_LLM_API_KEY:-}" ]]; then
+  USE_EXTERNAL_LLM="true"
+fi
+
+# Build the goal prompt for the LLM (used by both modes)
+GPTDIFF_GOAL="Iteration: $ITERATION / $(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "unlimited"; fi)
 Target directory: $TARGET_DIR
 Template: $TEMPLATE
 
@@ -217,30 +228,47 @@ $EVAL_TAIL
 $CMD_TAIL
 "
 
-append_header "$GPTDIFF_LOG" "GPTDIFF"
-{
-  echo "Goal prompt:"
-  echo "$GPTDIFF_PROMPT"
-  echo ""
-  echo "----- gptdiff output -----"
-} >> "$GPTDIFF_LOG"
-
-# Run gptdiff using Python API (keeps diffs scoped; uses that dir's .gptignore)
+# Run the appropriate inference mode
 GPTDIFF_EXIT=0
-set +e
-(
-  cd "$TARGET_ABS" || exit 127
-  if [[ -n "$MODEL" ]]; then
-    python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" --model "$MODEL" --verbose "$GPTDIFF_PROMPT"
-  else
-    python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" --verbose "$GPTDIFF_PROMPT"
-  fi
-) >> "$GPTDIFF_LOG" 2>&1
-GPTDIFF_EXIT=$?
-set -e
-echo "" >> "$GPTDIFF_LOG"
-echo "gptdiff exit: $GPTDIFF_EXIT" >> "$GPTDIFF_LOG"
-echo "" >> "$GPTDIFF_LOG"
+if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
+  # External LLM mode: use gptdiff Python API
+  append_header "$GPTDIFF_LOG" "GPTDIFF_EXTERNAL_LLM"
+  {
+    echo "Mode: External LLM (GPTDIFF_LLM_API_KEY set)"
+    echo "Model: ${MODEL:-${GPTDIFF_MODEL:-default}}"
+    echo ""
+    echo "Goal prompt:"
+    echo "$GPTDIFF_GOAL"
+    echo ""
+    echo "----- gptdiff output -----"
+  } >> "$GPTDIFF_LOG"
+
+  set +e
+  (
+    cd "$TARGET_ABS" || exit 127
+    if [[ -n "$MODEL" ]]; then
+      python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" --model "$MODEL" --verbose "$GPTDIFF_GOAL"
+    else
+      python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" --verbose "$GPTDIFF_GOAL"
+    fi
+  ) >> "$GPTDIFF_LOG" 2>&1
+  GPTDIFF_EXIT=$?
+  set -e
+  echo "" >> "$GPTDIFF_LOG"
+  echo "gptdiff exit: $GPTDIFF_EXIT" >> "$GPTDIFF_LOG"
+  echo "" >> "$GPTDIFF_LOG"
+else
+  # Claude Code mode: just log, prompt will be returned to Claude Code
+  append_header "$GPTDIFF_LOG" "CLAUDE_CODE_INFERENCE"
+  {
+    echo "Mode: Claude Code inference (no GPTDIFF_LLM_API_KEY)"
+    echo "Iteration: $ITERATION"
+    echo "Goal: $GOAL"
+    echo "Files in scope:"
+    echo "$FILE_LIST"
+    echo ""
+  } >> "$GPTDIFF_LOG"
+fi
 
 # Write a small diffstat snapshot so the loop is visible
 if git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -263,29 +291,82 @@ mv "$TEMP_FILE" "$STATE_FILE"
 if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $NEXT_ITERATION -gt $MAX_ITERATIONS ]]; then
   SYSTEM_MSG="🛑 GPTDiff loop will stop next cycle (max iterations reached). Review git diff."
 else
-  SYSTEM_MSG="🔁 GPTDiff loop active | next iter: $NEXT_ITERATION | target: $TARGET_DIR | logs: .claude/gptdiff-loop/$TARGET_SLUG/ | cancel: /cancel-gptdiff-loop"
+  if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
+    SYSTEM_MSG="🔁 GPTDiff loop iter $ITERATION (external LLM) | target: $TARGET_DIR | cancel: /cancel-gptdiff-loop"
+  else
+    SYSTEM_MSG="🔁 GPTDiff loop iter $ITERATION (Claude Code) | target: $TARGET_DIR | cancel: /cancel-gptdiff-loop"
+  fi
 fi
 
 CHANGED_FILES_PREVIEW="$(tail -n 40 "$CHANGED_FILES_FILE" 2>/dev/null || true)"
 DIFFSTAT_PREVIEW="$(tail -n 80 "$DIFFSTAT_FILE" 2>/dev/null || true)"
 
-REASON_PROMPT="$BASE_PROMPT
+# Build the prompt based on inference mode
+if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
+  # External LLM mode: gptdiff already made changes, just summarize
+  REASON_PROMPT="$BASE_PROMPT
 
-Loop status:
-+- Target: $TARGET_DIR
-+- Iteration just ran: $ITERATION
-+- Next iteration: $NEXT_ITERATION
-+- gptdiff exit: $GPTDIFF_EXIT
-+- eval exit: $EVAL_EXIT
-+- cmd exit: $CMD_EXIT
+## GPTDiff Loop Status - Iteration $ITERATION
 
-Changed files (preview):
-+$CHANGED_FILES_PREVIEW
+**Mode:** External LLM (gptdiff)
+**Target:** \`$TARGET_DIR\`
+**Iteration:** $ITERATION / $(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "unlimited"; fi)
+**gptdiff exit:** $GPTDIFF_EXIT
+**eval exit:** $EVAL_EXIT
+**cmd exit:** $CMD_EXIT
 
-Diffstat (preview):
-+$DIFFSTAT_PREVIEW
+### Changed files
+\`\`\`
+$CHANGED_FILES_PREVIEW
+\`\`\`
 
-Please reply with 1–5 bullets: what changed + what to improve next, then stop."
+### Diffstat
+\`\`\`
+$DIFFSTAT_PREVIEW
+\`\`\`
+
+---
+
+**Reply with 1-5 bullets: what changed + what to improve next, then stop.**"
+else
+  # Claude Code mode: ask Claude Code to make the improvements
+  REASON_PROMPT="## GPTDiff Loop - Iteration $ITERATION
+
+You are running an iterative improvement loop on a subdirectory.
+
+### Task
+**Target directory:** \`$TARGET_DIR\`
+**Iteration:** $ITERATION / $(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "unlimited"; fi)
+**Template:** $TEMPLATE
+
+### Goal
+$GOAL
+
+### Instructions
+1. **Read** the files in \`$TARGET_DIR\` (listed below)
+2. **Follow** INTERFACE.md as the contract for this directory
+3. **Check** RUBRIC.md if it exists for quality guidance
+4. **Make ONE coherent improvement** - keep changes small and reviewable
+5. **Use Edit tool** to apply your changes directly to the files
+6. **Preserve** existing structure and intent; avoid unnecessary rewrites
+
+### Files in scope (respecting .gptignore)
+\`\`\`
+$FILE_LIST
+\`\`\`
+
+### Signals from evaluators
+$(if [[ -n "$EVAL_TAIL" ]]; then echo "**Eval output (tail):**"; echo '```'; echo "$EVAL_TAIL"; echo '```'; else echo "_No eval command configured_"; fi)
+
+$(if [[ -n "$CMD_TAIL" ]]; then echo "**Gate command output (tail):**"; echo '```'; echo "$CMD_TAIL"; echo '```'; else echo "_No gate command configured_"; fi)
+
+### Recent changes
+$(if [[ -n "$CHANGED_FILES_PREVIEW" ]]; then echo '```'; echo "$CHANGED_FILES_PREVIEW"; echo '```'; else echo "_No changes yet_"; fi)
+
+---
+
+**Now read the files, make ONE improvement, then reply with a brief summary of what you changed.**"
+fi
 
 # Block stop and feed prompt back
 jq -n \

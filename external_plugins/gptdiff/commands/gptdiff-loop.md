@@ -13,8 +13,8 @@ Initialize the loop (this scaffolds the target directory and writes loop state):
 ```
 
 The loop runs via a **Stop hook**:
-- it repeatedly invokes gptdiff's Python API (`generate_diff` + `smartapply`)
-- it iterates until `--max-iterations` is reached (or `--cmd` succeeds)
+- Makes improvements via **Claude Code** (default) or **external LLM** (if `GPTDIFF_LLM_API_KEY` is set)
+- Iterates until `--max-iterations` is reached (or `--cmd` succeeds)
 
 You can cancel anytime:
 - `/cancel-gptdiff-loop`
