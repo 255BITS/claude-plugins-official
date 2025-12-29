@@ -26,10 +26,10 @@ Help the user configure the loop interactively:
 
 2. **Ask about inference mode** using AskUserQuestion:
    - **If GPTDIFF_LLM_API_KEY is set**: Ask if they want to use:
-     - "External LLM" - Uses gptdiff API with model: ${GPTDIFF_MODEL:-deepseek-reasoner}
+     - "External LLM" - Uses gptdiff API with model: ${GPTDIFF_MODEL:-google/gemini-3-flash-preview-thinking}
      - "Claude Code" - Uses Claude's own inference (no external API needed)
    - **If NOT set**: Inform them it will use Claude Code mode.
-     - Mention they can set `GPTDIFF_LLM_API_KEY` for external LLM (supports OpenAI-compatible APIs: Anthropic, DeepSeek, nano-gpt, etc.)
+     - Mention they can set `GPTDIFF_LLM_API_KEY` for external LLM (supports OpenRouter, OpenAI-compatible APIs, etc.)
 
 3. **Discover the project structure**:
    ```bash
