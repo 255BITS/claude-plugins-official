@@ -233,23 +233,46 @@ if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
     echo "----- gptdiff output -----"
   } >> "$GPTDIFF_LOG"
 
-  # Run gptdiff with progress indicator to prevent timeout
-  echo "🔄 Calling external LLM (this may take 1-2 minutes)..." >&2
+  # Run gptdiff in background to avoid hook timeout
+  PENDING_FILE="$LOOP_DIR/pending"
+  RESULT_FILE="$LOOP_DIR/result"
 
-  set +e
-  (
-    cd "$TARGET_ABS" || exit 127
-    if [[ -n "$MODEL" ]]; then
-      python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" --model "$MODEL" --verbose "$GPTDIFF_GOAL"
+  # Check if previous background job is still running
+  if [[ -f "$PENDING_FILE" ]]; then
+    PID=$(cat "$PENDING_FILE" 2>/dev/null)
+    if kill -0 "$PID" 2>/dev/null; then
+      echo "⏳ External LLM still processing (PID $PID)..." >&2
+      # Return without blocking - will check again on next stop
+      GPTDIFF_EXIT=0
     else
-      python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" --verbose "$GPTDIFF_GOAL"
+      # Previous job finished, check result
+      if [[ -f "$RESULT_FILE" ]]; then
+        GPTDIFF_EXIT=$(cat "$RESULT_FILE")
+        echo "✅ External LLM completed (exit: $GPTDIFF_EXIT)" >&2
+      else
+        GPTDIFF_EXIT=1
+        echo "⚠️ External LLM job finished but no result found" >&2
+      fi
+      rm -f "$PENDING_FILE" "$RESULT_FILE"
     fi
-  ) 2>&1 | tee -a "$GPTDIFF_LOG" >&2
-  GPTDIFF_EXIT=${PIPESTATUS[0]}
-  set -e
-  echo "" >> "$GPTDIFF_LOG"
-  echo "gptdiff exit: $GPTDIFF_EXIT" >> "$GPTDIFF_LOG"
-  echo "" >> "$GPTDIFF_LOG"
+  else
+    # Start new background job
+    echo "🚀 Starting external LLM in background..." >&2
+    (
+      cd "$TARGET_ABS" || exit 127
+      if [[ -n "$MODEL" ]]; then
+        python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" --model "$MODEL" --verbose "$GPTDIFF_GOAL" >> "$GPTDIFF_LOG" 2>&1
+      else
+        python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" --verbose "$GPTDIFF_GOAL" >> "$GPTDIFF_LOG" 2>&1
+      fi
+      echo $? > "$RESULT_FILE"
+      rm -f "$PENDING_FILE"
+    ) &
+    BACKGROUND_PID=$!
+    echo "$BACKGROUND_PID" > "$PENDING_FILE"
+    echo "   PID: $BACKGROUND_PID - check /status or wait for next iteration" >&2
+    GPTDIFF_EXIT=0
+  fi
 else
   # Claude Code mode: just log, prompt will be returned to Claude Code
   append_header "$GPTDIFF_LOG" "CLAUDE_CODE_INFERENCE"
