@@ -7,9 +7,9 @@ allowed-tools: ["Bash", "Read"]
 
 Check the current loop status by running these commands:
 
-1. **Check if loop is active**:
+1. **Check if loop is active** (use git root to find state file):
    ```
-   cat .claude/gptdiff-loop.local.md 2>/dev/null || echo "NO_ACTIVE_LOOP"
+   ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && cat "$ROOT/.claude/gptdiff-loop.local.md" 2>/dev/null || echo "NO_ACTIVE_LOOP"
    ```
 
 2. **If NO_ACTIVE_LOOP**: Say "No GPTDiff loop is currently running."
