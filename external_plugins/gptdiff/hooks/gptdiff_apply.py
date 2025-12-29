@@ -58,7 +58,10 @@ def main():
     if args.verbose:
         print("Loading project files...", file=sys.stderr)
 
-    files = load_project_files(target_dir, target_dir)
+    files_list = load_project_files(target_dir, target_dir)
+
+    # Convert list of tuples to dict (load_project_files returns [(path, content), ...])
+    files = {path: content for path, content in files_list}
 
     if not files:
         print("Warning: No files loaded from target directory", file=sys.stderr)
