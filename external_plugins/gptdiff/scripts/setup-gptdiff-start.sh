@@ -18,6 +18,7 @@ OPTIONS:
   --file PATH                  Target file (can specify multiple)
   --goal TEXT                  Goal prompt for GPTDiff (required)
   --max-iterations N           Stop after N iterations (default: 3, 0 = unlimited)
+  --inference-mode MODE        "claude" (default) or "external" LLM
   --eval-cmd CMD               Optional evaluator command (signals only)
   --model MODEL                Optional GPTDiff model override
   -h, --help                   Show help
@@ -40,6 +41,7 @@ TARGET_DIRS=()
 TARGET_FILES=()
 GOAL=""
 MAX_ITERATIONS="3"
+INFERENCE_MODE="claude"
 EVAL_CMD="null"
 MODEL="null"
 
@@ -63,6 +65,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --max-iterations)
       MAX_ITERATIONS="${2:-}"
+      shift 2
+      ;;
+    --inference-mode)
+      INFERENCE_MODE="${2:-claude}"
       shift 2
       ;;
     --eval-cmd)
@@ -184,6 +190,7 @@ TARGET_FILES_YAML="$(build_yaml_array "${TARGET_FILES[@]}")"
     done
   fi
   echo "goal: \"$GOAL_ESC\""
+  echo "inference_mode: \"$INFERENCE_MODE\""
   echo "eval_cmd: $EVAL_CMD_YAML"
   echo "model: $MODEL_YAML"
   echo "started_at: \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\""
@@ -228,6 +235,7 @@ fi
 
 echo "🎯 Goal:        $GOAL"
 echo "🔄 Iterations:  $(if [[ "$MAX_ITERATIONS" -gt 0 ]]; then echo "1 of $MAX_ITERATIONS"; else echo "unlimited"; fi)"
+echo "🧠 Inference:   $(if [[ "$INFERENCE_MODE" == "external" ]]; then echo "External LLM (gptdiff)"; else echo "Claude Code"; fi)"
 
 if [[ "$EVAL_CMD_YAML" != "null" ]]; then
   echo "📊 Eval cmd:    $EVAL_CMD"

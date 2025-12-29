@@ -98,6 +98,7 @@ MAX_ITERATIONS="$(strip_yaml_quotes "$(yaml_get_raw max_iterations)")"
 GOAL="$(yaml_unescape "$(strip_yaml_quotes "$(yaml_get_raw goal)")")"
 EVAL_CMD_RAW="$(yaml_get_raw eval_cmd)"
 MODEL_RAW="$(yaml_get_raw model)"
+INFERENCE_MODE_RAW="$(yaml_get_raw inference_mode)"
 
 # Parse arrays for multiple targets
 TARGET_DIRS_STR="$(yaml_get_array target_dirs)"
@@ -111,10 +112,12 @@ fi
 
 EVAL_CMD="$(yaml_unescape "$(strip_yaml_quotes "$EVAL_CMD_RAW")")"
 MODEL="$(yaml_unescape "$(strip_yaml_quotes "$MODEL_RAW")")"
+INFERENCE_MODE="$(yaml_unescape "$(strip_yaml_quotes "$INFERENCE_MODE_RAW")")"
 
 # Normalize null-like values
 if [[ "${EVAL_CMD_RAW:-}" == "null" ]] || [[ -z "${EVAL_CMD:-}" ]]; then EVAL_CMD=""; fi
 if [[ "${MODEL_RAW:-}" == "null" ]] || [[ -z "${MODEL:-}" ]]; then MODEL=""; fi
+if [[ "${INFERENCE_MODE_RAW:-}" == "null" ]] || [[ -z "${INFERENCE_MODE:-}" ]]; then INFERENCE_MODE="claude"; fi
 
 # Validate numeric fields
 if [[ ! "$ITERATION" =~ ^[0-9]+$ ]]; then
@@ -247,9 +250,14 @@ FILE_LIST="$(eval python3 "$PLUGIN_HOOKS_DIR/prepare_context.py" $PREPARE_ARGS -
 set -e
 
 # Determine inference mode: external LLM or Claude Code
+# Respect the saved inference_mode from state file (set during /start)
 USE_EXTERNAL_LLM="false"
-if [[ -n "${GPTDIFF_LLM_API_KEY:-}" ]]; then
-  USE_EXTERNAL_LLM="true"
+if [[ "$INFERENCE_MODE" == "external" ]]; then
+  if [[ -n "${GPTDIFF_LLM_API_KEY:-}" ]]; then
+    USE_EXTERNAL_LLM="true"
+  else
+    echo "⚠️  GPTDiff loop: External LLM mode requested but GPTDIFF_LLM_API_KEY not set. Falling back to Claude Code." >&2
+  fi
 fi
 
 # Build the goal prompt for the LLM (used by both modes)

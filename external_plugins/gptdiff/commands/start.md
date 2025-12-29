@@ -35,10 +35,25 @@ The user provided a goal directly. Auto-discover the right files:
    - Show what directories/files you found
    - Ask: 3 (quick), 5 (medium), 10 (thorough)
 
-4. **Run the setup**:
+4. **Ask about inference mode** using AskUserQuestion:
+   - **Claude Code (Recommended)**: Uses your current Claude Code session to make improvements. No additional API key needed.
+   - **External LLM**: Uses gptdiff's API to call an external LLM (requires `GPTDIFF_LLM_API_KEY` env var).
+
+   If external LLM is chosen, check if `GPTDIFF_LLM_API_KEY` is set:
+   ```bash
+   echo "${GPTDIFF_LLM_API_KEY:-NOT_SET}"
    ```
-   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] --goal "THE_GOAL_FROM_ARGUMENTS" --max-iterations N
+   If not set, inform the user they need to set it:
    ```
+   export GPTDIFF_LLM_API_KEY="your-api-key"
+   export GPTDIFF_MODEL="model-name"  # optional
+   ```
+
+5. **Run the setup**:
+   ```
+   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] --goal "THE_GOAL_FROM_ARGUMENTS" --max-iterations N --inference-mode MODE
+   ```
+   Where MODE is "claude" (default) or "external" based on user's choice.
 
 ## If NO arguments provided (empty $ARGUMENTS):
 
@@ -65,10 +80,25 @@ Full interactive mode:
 
 5. **Ask about iterations**: 3 (quick), 5 (medium), 10 (thorough)
 
-6. **Run the setup**:
+6. **Ask about inference mode** using AskUserQuestion:
+   - **Claude Code (Recommended)**: Uses your current Claude Code session to make improvements. No additional API key needed.
+   - **External LLM**: Uses gptdiff's API to call an external LLM (requires `GPTDIFF_LLM_API_KEY` env var).
+
+   If external LLM is chosen, check if `GPTDIFF_LLM_API_KEY` is set:
+   ```bash
+   echo "${GPTDIFF_LLM_API_KEY:-NOT_SET}"
    ```
-   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N
+   If not set, inform the user they need to set it:
    ```
+   export GPTDIFF_LLM_API_KEY="your-api-key"
+   export GPTDIFF_MODEL="model-name"  # optional
+   ```
+
+7. **Run the setup**:
+   ```
+   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N --inference-mode MODE
+   ```
+   Where MODE is "claude" (default) or "external" based on user's choice.
 
 ---
 
