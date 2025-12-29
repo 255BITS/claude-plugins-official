@@ -180,18 +180,31 @@ def main():
         print(f"Error saving files: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Count changes
-    changed_count = sum(1 for path in updated_files if files.get(path) != updated_files.get(path))
-    new_count = sum(1 for path in updated_files if path not in files)
+    # Count changes - compare relative_files to original files (need to convert original to relative too)
+    original_relative = {}
+    for path, content in files.items():
+        if os.path.isabs(path):
+            try:
+                rel_path = os.path.relpath(path, target_dir)
+                if not rel_path.startswith('..'):
+                    original_relative[rel_path] = content
+            except ValueError:
+                pass
+        else:
+            original_relative[path] = content
 
-    print(f"Applied changes: {changed_count} modified, {new_count} new files")
+    changed_count = sum(1 for path, content in relative_files.items()
+                       if path in original_relative and original_relative[path] != content)
+    new_count = sum(1 for path in relative_files if path not in original_relative)
 
-    if args.verbose:
-        for path in updated_files:
-            if path not in files:
-                print(f"  + {path}")
-            elif files.get(path) != updated_files.get(path):
-                print(f"  M {path}")
+    print(f"✅ Applied changes: {changed_count} modified, {new_count} new files")
+
+    if args.verbose or (changed_count + new_count) > 0:
+        for path in relative_files:
+            if path not in original_relative:
+                print(f"  + {path}", file=sys.stderr)
+            elif original_relative[path] != relative_files[path]:
+                print(f"  M {path}", file=sys.stderr)
 
 
 if __name__ == "__main__":
