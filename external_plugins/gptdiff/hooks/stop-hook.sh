@@ -432,9 +432,18 @@ $CHANGED_FILES_PREVIEW
 $DIFFSTAT_PREVIEW
 \`\`\`
 
+### Your role
+The external LLM made the changes above. You may now:
+- **Review** the changes (use \`git diff\` to inspect)
+- **Run commands** based on the current state:
+  - Commit changes: \`git add . && git commit -m \"...\"\`
+  - Run tests or linters to verify
+  - Any other maintenance commands
+- **Summarize** what changed and what to improve next
+
 ---
 
-**Reply with 1-5 bullets: what changed + what to improve next, then stop.**"
+**Review the changes, run any appropriate commands, then reply with a brief summary.**"
 else
   # Claude Code mode: ask Claude Code to make the improvements
   REASON_PROMPT="
