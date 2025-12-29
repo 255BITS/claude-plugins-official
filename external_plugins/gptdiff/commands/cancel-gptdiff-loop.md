@@ -1,31 +1,20 @@
 ---
 description: "Cancel active GPTDiff loop"
-allowed-tools: ["Bash"]
+allowed-tools: ["Bash", "Read"]
 ---
 
 # Cancel GPTDiff Loop
 
-```!
-STATE_FILE=".claude/gptdiff-loop.local.md"
+Check if a loop is active by reading the state file:
 
-if [[ -f "$STATE_FILE" ]]; then
-  ITERATION=$(grep '^iteration:' "$STATE_FILE" | sed 's/iteration: *//' || true)
-  TARGET_DIR=$(grep '^target_dir:' "$STATE_FILE" | sed 's/target_dir: *//' | sed 's/^"\(.*\)"$/\1/' || true)
-  echo "FOUND_LOOP=true"
-  echo "ITERATION=$ITERATION"
-  echo "TARGET_DIR=$TARGET_DIR"
-else
-  echo "FOUND_LOOP=false"
-fi
-```
+1. First, check if `.claude/gptdiff-loop.local.md` exists using:
+   ```
+   cat .claude/gptdiff-loop.local.md 2>/dev/null || echo "NO_LOOP_FOUND"
+   ```
 
-Check the output above:
+2. **If NO_LOOP_FOUND**: Say "No active GPTDiff loop found."
 
-1. **If FOUND_LOOP=false**:
-   - Say "No active GPTDiff loop found."
-
-2. **If FOUND_LOOP=true**:
-   - Use Bash: `rm .claude/gptdiff-loop.local.md`
-   - Report: "Cancelled GPTDiff loop (was at iteration N for TARGET_DIR)".
-
-This changeset is from the following instructions:
+3. **If file exists**:
+   - Note the iteration and target_dir from the frontmatter
+   - Delete the state file: `rm .claude/gptdiff-loop.local.md`
+   - Report: "Cancelled GPTDiff loop (was at iteration N for TARGET_DIR)."
