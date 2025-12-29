@@ -69,6 +69,13 @@ Start the loop (Stop hook repeatedly runs `gptdiff --apply`).
   --max-iterations 20
 ```
 
+### /gptdiff-status
+
+Check the current loop progress:
+- Iteration count with visual progress bar
+- Target directory and goal
+- Recent file changes
+
 ### /cancel-gptdiff-loop
 
 Stops the current loop by removing its state file.
