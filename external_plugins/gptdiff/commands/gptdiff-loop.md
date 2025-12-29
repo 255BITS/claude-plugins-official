@@ -31,12 +31,16 @@ Help the user configure the loop interactively:
    - Read 2-3 key files to understand what the code does
    - Identify the domain: UI components? API endpoints? Game content? Data models? Utils?
 
-4. **Ask about goal with SPECIFIC suggestions** based on what you found:
-   - If it's UI code: "Improve UI responsiveness", "Add animations", "Improve accessibility"
-   - If it's game content: "Add more variety", "Balance values", "Make it more fun"
-   - If it's API/backend: "Add error handling", "Improve validation", "Add logging"
-   - If it's data/models: "Add new fields", "Improve schema", "Add validation"
-   - Make suggestions specific to the actual file contents you read!
+4. **Ask about goal with SPECIFIC, DIRECTIONAL suggestions** based on what you read:
+   - Be specific to the actual content: if you see enemies.ts with 3 enemies, suggest "Add 2-3 new enemy types with unique abilities"
+   - Be directional (add/improve/expand/polish/fix): "Add more upgrade options", "Improve damage scaling", "Expand the skill tree"
+   - Reference actual things in the code: "Add more items like {example from file}", "Balance the {thing you saw}"
+   - Examples of good directional goals:
+     - "Add 3-4 new passive abilities that synergize with existing ones"
+     - "Improve the shop UI with better item previews and sorting"
+     - "Expand enemy variety - add ranged and boss variants"
+     - "Polish the combat feel - add screen shake, hit feedback"
+   - DON'T be generic like "improve code quality" - be specific to what's actually there!
 
 5. **Ask about iterations and command**:
    - Iterations: 3 (quick), 5 (medium), 10 (thorough)
