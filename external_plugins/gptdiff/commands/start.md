@@ -17,21 +17,35 @@ Run the setup script directly:
 
 Help the user configure the loop interactively:
 
-1. **Discover the project structure**:
+1. **Check inference mode** - Run this to detect environment:
+   ```bash
+   echo "GPTDIFF_LLM_API_KEY=${GPTDIFF_LLM_API_KEY:+set}"
+   echo "GPTDIFF_MODEL=${GPTDIFF_MODEL:-not set}"
+   echo "GPTDIFF_BASE_URL=${GPTDIFF_BASE_URL:-not set}"
+   ```
+
+2. **Ask about inference mode** using AskUserQuestion:
+   - **If GPTDIFF_LLM_API_KEY is set**: Ask if they want to use:
+     - "External LLM" - Uses gptdiff API with model: ${GPTDIFF_MODEL:-deepseek-reasoner}
+     - "Claude Code" - Uses Claude's own inference (no external API needed)
+   - **If NOT set**: Inform them it will use Claude Code mode.
+     - Mention they can set `GPTDIFF_LLM_API_KEY` for external LLM (supports OpenAI-compatible APIs: Anthropic, DeepSeek, nano-gpt, etc.)
+
+3. **Discover the project structure**:
    ```bash
    ls -d */ 2>/dev/null | head -20
    ls package.json pyproject.toml Makefile Cargo.toml go.mod 2>/dev/null || true
    ```
 
-2. **Ask about target directory first** using AskUserQuestion:
+4. **Ask about target directory** using AskUserQuestion:
    - Suggest directories that look like good candidates (src/, lib/, app/, components/, etc.)
 
-3. **After user picks a directory, analyze its contents**:
+5. **After user picks a directory, analyze its contents**:
    - List files in the chosen directory: `ls -la <dir>/`
    - Read 2-3 key files to understand what the code does
    - Identify the domain: UI components? API endpoints? Game content? Data models? Utils?
 
-4. **Ask about goal with SPECIFIC, DIRECTIONAL suggestions** based on what you read:
+6. **Ask about goal with SPECIFIC, DIRECTIONAL suggestions** based on what you read:
    - Be specific to the actual content: if you see enemies.ts with 3 enemies, suggest "Add 2-3 new enemy types with unique abilities"
    - Be directional (add/improve/expand/polish/fix): "Add more upgrade options", "Improve damage scaling", "Expand the skill tree"
    - Reference actual things in the code: "Add more items like {example from file}", "Balance the {thing you saw}"
@@ -42,11 +56,11 @@ Help the user configure the loop interactively:
      - "Polish the combat feel - add screen shake, hit feedback"
    - DON'T be generic like "improve code quality" - be specific to what's actually there!
 
-5. **Ask about iterations and command**:
+7. **Ask about iterations and command**:
    - Iterations: 3 (quick), 5 (medium), 10 (thorough)
    - Command: Based on project type, or "None"
 
-6. **Run the setup** with the gathered parameters:
+8. **Run the setup** with the gathered parameters:
    ```
    /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N [--cmd "CMD"]
    ```
