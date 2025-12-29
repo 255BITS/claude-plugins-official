@@ -187,23 +187,33 @@ EOF
 
 cat <<EOF
 
-🔁 GPTDiff loop activated!
+╔══════════════════════════════════════════════════════════════════╗
+║                    🔁 GPTDIFF LOOP ACTIVATED                     ║
+╚══════════════════════════════════════════════════════════════════╝
 
-Target directory: $TARGET_DIR
-Template: $TEMPLATE
-Max iterations: $(if [[ "$MAX_ITERATIONS" -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "unlimited"; fi)
-Eval command: $(if [[ "$EVAL_CMD_YAML" != "null" ]]; then echo "$EVAL_CMD"; else echo "none"; fi)
-Hard gate cmd: $(if [[ "$CMD_YAML" != "null" ]]; then echo "$CMD"; else echo "none"; fi)
-Model: $(if [[ "$MODEL_YAML" != "null" ]]; then echo "$MODEL"; else echo "default"; fi)
+📁 Target:      $TARGET_DIR/
+🎯 Goal:        $GOAL
+📋 Template:    $TEMPLATE
+🔄 Iterations:  $(if [[ "$MAX_ITERATIONS" -gt 0 ]]; then echo "1 of $MAX_ITERATIONS"; else echo "unlimited"; fi)
+EOF
 
-State file:
-  .claude/gptdiff-loop.local.md
+if [[ "$CMD_YAML" != "null" ]]; then
+  echo "✅ Gate cmd:    $CMD"
+fi
+if [[ "$EVAL_CMD_YAML" != "null" ]]; then
+  echo "📊 Eval cmd:    $EVAL_CMD"
+fi
+if [[ "$MODEL_YAML" != "null" ]]; then
+  echo "🤖 Model:       $MODEL"
+fi
 
-Logs:
-  .claude/gptdiff-loop/<target-slug>/
+cat <<EOF
 
-Tip:
-  Keep iteration budgets small and review with:
-    git diff
-    git add -p
+┌─────────────────────────────────────────────────────────────────┐
+│  The loop will now run automatically via the Stop hook.        │
+│  Each iteration: analyze → improve → verify → repeat           │
+│                                                                 │
+│  To cancel anytime:  /cancel-gptdiff-loop                       │
+│  To check progress:  cat .claude/gptdiff-loop.local.md          │
+└─────────────────────────────────────────────────────────────────┘
 EOF
