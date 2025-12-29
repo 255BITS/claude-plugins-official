@@ -9,7 +9,7 @@ Check the current loop status by running these commands:
 
 1. **Check if loop is active** (use git root to find state file):
    ```
-   ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && cat "$ROOT/.claude/gptdiff-loop.local.md" 2>/dev/null || echo "NO_ACTIVE_LOOP"
+   ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && cat "$ROOT/.claude/start.local.md" 2>/dev/null || echo "NO_ACTIVE_LOOP"
    ```
 
 2. **If NO_ACTIVE_LOOP**: Say "No GPTDiff loop is currently running."
@@ -17,8 +17,8 @@ Check the current loop status by running these commands:
 3. **If loop is active**, also check for background job:
    ```
    ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-   TARGET_SLUG=$(grep '^target_dir:' "$ROOT/.claude/gptdiff-loop.local.md" 2>/dev/null | sed 's/target_dir: *//' | sed 's/^"\(.*\)"$/\1/' | sed 's#[^A-Za-z0-9._-]#_#g')
-   PENDING="$ROOT/.claude/gptdiff-loop/$TARGET_SLUG/pending"
+   TARGET_SLUG=$(grep '^target_dir:' "$ROOT/.claude/start.local.md" 2>/dev/null | sed 's/target_dir: *//' | sed 's/^"\(.*\)"$/\1/' | sed 's#[^A-Za-z0-9._-]#_#g')
+   PENDING="$ROOT/.claude/start/$TARGET_SLUG/pending"
    if [[ -f "$PENDING" ]]; then
      PID=$(cat "$PENDING")
      if kill -0 "$PID" 2>/dev/null; then
