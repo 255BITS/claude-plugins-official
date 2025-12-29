@@ -17,37 +17,39 @@ Run the setup script directly:
 
 Help the user configure the loop interactively:
 
-1. **Discover the project** - Run these commands to understand the codebase:
+1. **Discover the project structure**:
    ```bash
-   # List top-level directories (potential --dir targets)
    ls -d */ 2>/dev/null | head -20
-
-   # Detect project type
-   ls package.json pyproject.toml Makefile Cargo.toml go.mod setup.py requirements.txt 2>/dev/null || echo "No standard project files found"
+   ls package.json pyproject.toml Makefile Cargo.toml go.mod 2>/dev/null || true
    ```
 
-2. **Ask the user** using AskUserQuestion with smart suggestions based on what you found:
-   - **Target directory**: Suggest directories that look like good candidates (src/, lib/, app/, components/, etc.)
-   - **Goal**: Ask what they want to improve (code quality, add features, fix bugs, etc.)
-   - **Iterations**: How many iterations? Default is 3. Options: 3 (quick), 5 (medium), 10 (thorough)
-   - **Command** (optional): Suggest based on project type:
-     - package.json → `npm test` or `npm run build`
-     - pyproject.toml/setup.py → `pytest` or `python -m pytest`
-     - Makefile → `make test` or `make`
-     - Cargo.toml → `cargo test`
-     - go.mod → `go test ./...`
-     - Or "None" if no verification needed
+2. **Ask about target directory first** using AskUserQuestion:
+   - Suggest directories that look like good candidates (src/, lib/, app/, components/, etc.)
 
-3. **Run the setup** with the gathered parameters:
+3. **After user picks a directory, analyze its contents**:
+   - List files in the chosen directory: `ls -la <dir>/`
+   - Read 2-3 key files to understand what the code does
+   - Identify the domain: UI components? API endpoints? Game content? Data models? Utils?
+
+4. **Ask about goal with SPECIFIC suggestions** based on what you found:
+   - If it's UI code: "Improve UI responsiveness", "Add animations", "Improve accessibility"
+   - If it's game content: "Add more variety", "Balance values", "Make it more fun"
+   - If it's API/backend: "Add error handling", "Improve validation", "Add logging"
+   - If it's data/models: "Add new fields", "Improve schema", "Add validation"
+   - Make suggestions specific to the actual file contents you read!
+
+5. **Ask about iterations and command**:
+   - Iterations: 3 (quick), 5 (medium), 10 (thorough)
+   - Command: Based on project type, or "None"
+
+6. **Run the setup** with the gathered parameters:
    ```
    /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-loop.sh --dir DIR --goal "GOAL" --max-iterations N [--cmd "CMD"]
    ```
 
 ---
 
-The loop runs via a **Stop hook**:
-- Makes improvements via **Claude Code** (default) or **external LLM** (if `GPTDIFF_LLM_API_KEY` is set)
-- Iterates until `--max-iterations` is reached
+The loop runs via a **Stop hook** and iterates until `--max-iterations` is reached.
 
 Cancel anytime with: `/cancel-gptdiff-loop`
 
