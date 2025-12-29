@@ -1,6 +1,6 @@
 ---
-description: "Start a GPTDiff-powered agent loop on a subdirectory"
-argument-hint: "--dir PATH --goal '...' [--max-iterations N] [--cmd '...'] [--eval-cmd '...'] [--model MODEL]"
+description: "Start a GPTDiff-powered agent loop on directories or files"
+argument-hint: "--dir PATH [--dir PATH2] [--file FILE] --goal '...' [--max-iterations N] [--cmd '...']"
 allowed-tools: ["Bash", "Glob", "Read", "AskUserQuestion"]
 ---
 
@@ -37,11 +37,13 @@ Help the user configure the loop interactively:
    ls package.json pyproject.toml Makefile Cargo.toml go.mod 2>/dev/null || true
    ```
 
-4. **Ask about target directory** using AskUserQuestion:
+4. **Ask about target directories/files** using AskUserQuestion:
    - Suggest directories that look like good candidates (src/, lib/, app/, components/, etc.)
+   - User can pick multiple directories or specific files
+   - Use `--dir` for directories, `--file` for individual files
 
-5. **After user picks a directory, analyze its contents**:
-   - List files in the chosen directory: `ls -la <dir>/`
+5. **After user picks targets, analyze their contents**:
+   - List files in the chosen directories: `ls -la <dir>/`
    - Read 2-3 key files to understand what the code does
    - Identify the domain: UI components? API endpoints? Game content? Data models? Utils?
 
@@ -62,7 +64,7 @@ Help the user configure the loop interactively:
 
 8. **Run the setup** with the gathered parameters:
    ```
-   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N [--cmd "CMD"]
+   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] [--file FILE] --goal "GOAL" --max-iterations N [--cmd "CMD"]
    ```
 
 ---

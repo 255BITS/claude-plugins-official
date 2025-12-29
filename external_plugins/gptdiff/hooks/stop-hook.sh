@@ -63,13 +63,52 @@ yaml_unescape() {
   echo "$v"
 }
 
+# Parse YAML array (returns newline-separated values)
+yaml_get_array() {
+  local key="$1"
+  local in_array=false
+  local found_key=false
+  echo "$FRONTMATTER" | while IFS= read -r line; do
+    if [[ "$line" =~ ^${key}:[[:space:]]*$ ]]; then
+      found_key=true
+      in_array=true
+      continue
+    elif [[ "$line" =~ ^${key}:[[:space:]]*\[\] ]]; then
+      # Empty array
+      break
+    elif [[ "$found_key" == "true" && "$in_array" == "true" ]]; then
+      if [[ "$line" =~ ^[[:space:]]+-[[:space:]]+(.*) ]]; then
+        local val="${BASH_REMATCH[1]}"
+        # Strip quotes
+        val="$(echo "$val" | sed 's/^"\(.*\)"$/\1/')"
+        # Unescape
+        val="${val//\\\\/\\}"
+        val="${val//\\\"/\"}"
+        echo "$val"
+      elif [[ "$line" =~ ^[a-zA-Z_] ]]; then
+        # New key, end of array
+        break
+      fi
+    fi
+  done
+}
+
 ITERATION="$(strip_yaml_quotes "$(yaml_get_raw iteration)")"
 MAX_ITERATIONS="$(strip_yaml_quotes "$(yaml_get_raw max_iterations)")"
-TARGET_DIR="$(yaml_unescape "$(strip_yaml_quotes "$(yaml_get_raw target_dir)")")"
 GOAL="$(yaml_unescape "$(strip_yaml_quotes "$(yaml_get_raw goal)")")"
 CMD_RAW="$(yaml_get_raw cmd)"
 EVAL_CMD_RAW="$(yaml_get_raw eval_cmd)"
 MODEL_RAW="$(yaml_get_raw model)"
+
+# Parse arrays for multiple targets
+TARGET_DIRS_STR="$(yaml_get_array target_dirs)"
+TARGET_FILES_STR="$(yaml_get_array target_files)"
+
+# Also support legacy single target_dir
+LEGACY_TARGET_DIR="$(yaml_unescape "$(strip_yaml_quotes "$(yaml_get_raw target_dir)")")"
+if [[ -n "$LEGACY_TARGET_DIR" ]] && [[ -z "$TARGET_DIRS_STR" ]]; then
+  TARGET_DIRS_STR="$LEGACY_TARGET_DIR"
+fi
 
 CMD="$(yaml_unescape "$(strip_yaml_quotes "$CMD_RAW")")"
 EVAL_CMD="$(yaml_unescape "$(strip_yaml_quotes "$EVAL_CMD_RAW")")"
@@ -93,18 +132,48 @@ if [[ ! "$MAX_ITERATIONS" =~ ^[0-9]+$ ]]; then
   exit 0
 fi
 
-if [[ -z "${TARGET_DIR:-}" ]]; then
-  echo "⚠️  GPTDiff loop: State file corrupted (target_dir missing)." >&2
+if [[ -z "${TARGET_DIRS_STR:-}" ]] && [[ -z "${TARGET_FILES_STR:-}" ]]; then
+  echo "⚠️  GPTDiff loop: State file corrupted (no target_dirs or target_files)." >&2
   rm -f "$STATE_FILE"
   exit 0
 fi
 
-TARGET_ABS="$ROOT_DIR/$TARGET_DIR"
-if [[ ! -d "$TARGET_ABS" ]]; then
-  echo "⚠️  GPTDiff loop: target_dir does not exist: $TARGET_ABS" >&2
-  rm -f "$STATE_FILE"
-  exit 0
-fi
+# Validate all target directories exist
+while IFS= read -r dir; do
+  [[ -z "$dir" ]] && continue
+  TARGET_ABS="$ROOT_DIR/$dir"
+  if [[ ! -d "$TARGET_ABS" ]]; then
+    echo "⚠️  GPTDiff loop: target directory does not exist: $TARGET_ABS" >&2
+    rm -f "$STATE_FILE"
+    exit 0
+  fi
+done <<< "$TARGET_DIRS_STR"
+
+# Validate all target files exist
+while IFS= read -r file; do
+  [[ -z "$file" ]] && continue
+  TARGET_ABS="$ROOT_DIR/$file"
+  if [[ ! -f "$TARGET_ABS" ]]; then
+    echo "⚠️  GPTDiff loop: target file does not exist: $TARGET_ABS" >&2
+    rm -f "$STATE_FILE"
+    exit 0
+  fi
+done <<< "$TARGET_FILES_STR"
+
+# Build a display string for targets
+TARGETS_DISPLAY=""
+while IFS= read -r dir; do
+  [[ -z "$dir" ]] && continue
+  TARGETS_DISPLAY+="$dir/ "
+done <<< "$TARGET_DIRS_STR"
+while IFS= read -r file; do
+  [[ -z "$file" ]] && continue
+  TARGETS_DISPLAY+="$file "
+done <<< "$TARGET_FILES_STR"
+TARGETS_DISPLAY="${TARGETS_DISPLAY% }"  # Trim trailing space
+
+# Create a slug for the loop directory (hash of all targets)
+TARGET_SLUG="$(echo "$TARGET_DIRS_STR$TARGET_FILES_STR" | md5sum | cut -c1-12)"
 
 # Stop if max iterations exceeded (0 = unlimited)
 if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -gt $MAX_ITERATIONS ]]; then
@@ -119,8 +188,7 @@ if [[ -z "$BASE_PROMPT" ]]; then
   BASE_PROMPT="Continue the GPTDiff loop. Reply with a short progress note, then stop."
 fi
 
-# Logs are kept per target directory
-TARGET_SLUG="$(echo "$TARGET_DIR" | sed 's#[^A-Za-z0-9._-]#_#g')"
+# Logs are kept per target set (TARGET_SLUG was already computed above)
 LOOP_DIR="$ROOT_DIR/.claude/start/$TARGET_SLUG"
 mkdir -p "$LOOP_DIR"
 
@@ -141,7 +209,7 @@ append_header() {
     echo "$title"
     echo "UTC: $(utc_now)"
     echo "Iteration: $ITERATION"
-    echo "Target: $TARGET_DIR"
+    echo "Targets: $TARGETS_DISPLAY"
     echo "============================================================"
   } >> "$f"
 }
@@ -153,7 +221,7 @@ if [[ -n "$EVAL_CMD" ]]; then
   set +e
   (
     cd "$ROOT_DIR" || exit 127
-    GPTDIFF_LOOP_TARGET_DIR="$TARGET_DIR" bash -lc "$EVAL_CMD"
+    GPTDIFF_LOOP_TARGETS="$TARGETS_DISPLAY" bash -lc "$EVAL_CMD"
   ) >> "$EVAL_LOG" 2>&1
   EVAL_EXIT=$?
   set -e
@@ -167,7 +235,7 @@ if [[ -n "$CMD" ]]; then
   set +e
   (
     cd "$ROOT_DIR" || exit 127
-    GPTDIFF_LOOP_TARGET_DIR="$TARGET_DIR" bash -lc "$CMD"
+    GPTDIFF_LOOP_TARGETS="$TARGETS_DISPLAY" bash -lc "$CMD"
   ) >> "$CMD_LOG" 2>&1
   CMD_EXIT=$?
   set -e
@@ -186,10 +254,20 @@ if [[ -f "$CMD_LOG" ]]; then
   CMD_TAIL="$(tail -n 80 "$CMD_LOG" | sed 's/\r$//')"
 fi
 
-# Get list of files in target directory (using gptdiff's .gptignore-aware loader)
+# Get list of files in target directories/files (using gptdiff's .gptignore-aware loader)
 FILE_LIST=""
 set +e
-FILE_LIST="$(python3 "$PLUGIN_HOOKS_DIR/prepare_context.py" --dir "$TARGET_ABS" --list-only 2>/dev/null)"
+# Build arguments for prepare_context.py
+PREPARE_ARGS=""
+while IFS= read -r dir; do
+  [[ -z "$dir" ]] && continue
+  PREPARE_ARGS+=" --dir \"$ROOT_DIR/$dir\""
+done <<< "$TARGET_DIRS_STR"
+while IFS= read -r file; do
+  [[ -z "$file" ]] && continue
+  PREPARE_ARGS+=" --file \"$ROOT_DIR/$file\""
+done <<< "$TARGET_FILES_STR"
+FILE_LIST="$(eval python3 "$PLUGIN_HOOKS_DIR/prepare_context.py" $PREPARE_ARGS --list-only 2>/dev/null)"
 set -e
 
 # Determine inference mode: external LLM or Claude Code
@@ -200,7 +278,7 @@ fi
 
 # Build the goal prompt for the LLM (used by both modes)
 GPTDIFF_GOAL="Iteration: $ITERATION / $(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "unlimited"; fi)
-Target directory: $TARGET_DIR
+Targets: $TARGETS_DISPLAY
 
 GOAL:
 $GOAL
@@ -209,6 +287,7 @@ CONSTRAINTS:
 - Make one coherent, meaningful improvement per iteration (small, reviewable diffs).
 - Preserve existing intent and structure; avoid unnecessary rewrites.
 - Keep changes focused and reviewable.
+- ONLY modify files within the specified targets.
 
 SIGNALS (optional):
 --- eval (tail) ---
@@ -258,13 +337,24 @@ if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
   else
     # Start new background job
     echo "🚀 Starting external LLM in background..." >&2
+
+    # Build gptdiff_apply.py arguments for multiple targets
+    APPLY_ARGS="--verbose"
+    if [[ -n "$MODEL" ]]; then
+      APPLY_ARGS+=" --model \"$MODEL\""
+    fi
+    while IFS= read -r dir; do
+      [[ -z "$dir" ]] && continue
+      APPLY_ARGS+=" --dir \"$ROOT_DIR/$dir\""
+    done <<< "$TARGET_DIRS_STR"
+    while IFS= read -r file; do
+      [[ -z "$file" ]] && continue
+      APPLY_ARGS+=" --file \"$ROOT_DIR/$file\""
+    done <<< "$TARGET_FILES_STR"
+
     (
-      cd "$TARGET_ABS" || exit 127
-      if [[ -n "$MODEL" ]]; then
-        python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" --model "$MODEL" --verbose "$GPTDIFF_GOAL" >> "$GPTDIFF_LOG" 2>&1
-      else
-        python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" --verbose "$GPTDIFF_GOAL" >> "$GPTDIFF_LOG" 2>&1
-      fi
+      cd "$ROOT_DIR" || exit 127
+      eval python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" $APPLY_ARGS "\"$GPTDIFF_GOAL\"" >> "$GPTDIFF_LOG" 2>&1
       echo $? > "$RESULT_FILE"
       rm -f "$PENDING_FILE"
     ) &
@@ -327,9 +417,9 @@ if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $NEXT_ITERATION -gt $MAX_ITERATIONS ]]; the
   SYSTEM_MSG="🛑 GPTDiff FINAL ITERATION $ITER_INFO - Loop complete after this. Review: git diff"
 else
   if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
-    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGET_DIR | External LLM | /stop to stop"
+    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGETS_DISPLAY | External LLM | /stop to stop"
   else
-    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGET_DIR | Claude Code | /stop to stop"
+    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGETS_DISPLAY | Claude Code | /stop to stop"
   fi
 fi
 
@@ -346,7 +436,7 @@ if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
 ╚══════════════════════════════════════════════════════════════════╝
 
 **Mode:** External LLM (gptdiff)
-**Target:** \`$TARGET_DIR\`
+**Targets:** \`$TARGETS_DISPLAY\`
 **Progress:** $ITER_INFO
 **gptdiff exit:** $GPTDIFF_EXIT
 **eval exit:** $EVAL_EXIT
@@ -372,18 +462,18 @@ else
 ║  🔁 GPTDIFF LOOP - ITERATION $ITERATION of $(printf "%-3s" "$(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "∞"; fi)")                          ║
 ╚══════════════════════════════════════════════════════════════════╝
 
-You are running an iterative improvement loop on a subdirectory.
+You are running an iterative improvement loop.
 
 ### Task
-**Target directory:** \`$TARGET_DIR\`
+**Targets:** \`$TARGETS_DISPLAY\`
 **Progress:** $ITER_INFO
 
 ### Goal
 $GOAL
 
 ### Instructions
-1. **Read** the files in \`$TARGET_DIR\` (listed below)
-2. **ONLY modify files in \`$TARGET_DIR\`** - do NOT edit files outside this directory
+1. **Read** the files listed below
+2. **ONLY modify files in the specified targets** - do NOT edit files outside these paths
 3. **Make ONE coherent improvement** - keep changes small and reviewable
 4. **Use Edit tool** to apply your changes directly to the files
 5. **Preserve** existing structure and intent; avoid unnecessary rewrites
@@ -396,7 +486,7 @@ $FILE_LIST
 ### Signals from evaluators
 $(if [[ -n "$EVAL_TAIL" ]]; then echo "**Eval output (tail):**"; echo '```'; echo "$EVAL_TAIL"; echo '```'; else echo "_No eval command configured_"; fi)
 
-$(if [[ -n "$CMD_TAIL" ]]; then echo "**Gate command output (tail):**"; echo '```'; echo "$CMD_TAIL"; echo '```'; else echo "_No gate command configured_"; fi)
+$(if [[ -n "$CMD_TAIL" ]]; then echo "**Cmd output (tail):**"; echo '```'; echo "$CMD_TAIL"; echo '```'; else echo "_No cmd configured_"; fi)
 
 ### Recent changes
 $(if [[ -n "$CHANGED_FILES_PREVIEW" ]]; then echo '```'; echo "$CHANGED_FILES_PREVIEW"; echo '```'; else echo "_No changes yet_"; fi)

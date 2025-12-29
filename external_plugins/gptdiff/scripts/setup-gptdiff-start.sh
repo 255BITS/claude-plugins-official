@@ -11,9 +11,11 @@ GPTDiff Loop (Agent Loop)
 
 USAGE:
   /start --dir PATH --goal "..." [OPTIONS]
+  /start --file PATH --file PATH --goal "..." [OPTIONS]
 
 OPTIONS:
-  --dir PATH                   Target subdirectory to work on (required)
+  --dir PATH                   Target directory (can specify multiple)
+  --file PATH                  Target file (can specify multiple)
   --goal TEXT                  Goal prompt for GPTDiff (required)
   --max-iterations N           Stop after N iterations (default: 3, 0 = unlimited)
   --eval-cmd CMD               Optional evaluator command (signals only)
@@ -26,13 +28,17 @@ EXAMPLES:
     --goal "Improve code quality and add tests." \
     --max-iterations 5
 
-  /start --dir src \
-    --goal "Fix bugs and improve error handling." \
-    --cmd "npm run build" \
+  /start --dir src --dir lib \
+    --goal "Refactor shared code between src and lib." \
+    --max-iterations 3
+
+  /start --file src/main.ts --file src/utils.ts \
+    --goal "Optimize these specific files." \
     --max-iterations 3
 HELP_EOF
 }
-TARGET_DIR=""
+TARGET_DIRS=()
+TARGET_FILES=()
 GOAL=""
 MAX_ITERATIONS="3"
 EVAL_CMD="null"
@@ -46,7 +52,11 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     --dir)
-      TARGET_DIR="${2:-}"
+      TARGET_DIRS+=("${2:-}")
+      shift 2
+      ;;
+    --file)
+      TARGET_FILES+=("${2:-}")
       shift 2
       ;;
     --goal)
@@ -77,8 +87,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$TARGET_DIR" ]]; then
-  echo "❌ Error: --dir PATH is required" >&2
+if [[ ${#TARGET_DIRS[@]} -eq 0 ]] && [[ ${#TARGET_FILES[@]} -eq 0 ]]; then
+  echo "❌ Error: At least one --dir or --file is required" >&2
   exit 1
 fi
 
@@ -97,6 +107,22 @@ if ! python3 -c "import gptdiff" 2>/dev/null; then
   exit 1
 fi
 
+# Validate directories exist
+for dir in "${TARGET_DIRS[@]}"; do
+  if [[ ! -d "$dir" ]]; then
+    echo "❌ Error: Directory does not exist: $dir" >&2
+    exit 1
+  fi
+done
+
+# Validate files exist
+for file in "${TARGET_FILES[@]}"; do
+  if [[ ! -f "$file" ]]; then
+    echo "❌ Error: File does not exist: $file" >&2
+    exit 1
+  fi
+done
+
 mkdir -p .claude
 
 yaml_escape() {
@@ -106,7 +132,6 @@ yaml_escape() {
   echo "$s"
 }
 
-TARGET_DIR_ESC="$(yaml_escape "$TARGET_DIR")"
 GOAL_ESC="$(yaml_escape "$GOAL")"
 
 if [[ -n "${EVAL_CMD:-}" ]] && [[ "$EVAL_CMD" != "null" ]]; then
@@ -130,24 +155,59 @@ else
   MODEL_YAML="null"
 fi
 
-cat > .claude/start.local.md <<EOF
----
-active: true
-iteration: 1
-max_iterations: $MAX_ITERATIONS
-target_dir: "$TARGET_DIR_ESC"
-goal: "$GOAL_ESC"
-eval_cmd: $EVAL_CMD_YAML
-cmd: $CMD_YAML
-model: $MODEL_YAML
-started_at: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
----
- 
-GPTDiff loop is active.
- 
-Please reply with a short progress note (or just \`ok\`) and then stop.
-To cancel: /stop
-EOF
+# Build YAML arrays for dirs and files
+build_yaml_array() {
+  local arr=("$@")
+  if [[ ${#arr[@]} -eq 0 ]]; then
+    echo "[]"
+  else
+    echo ""
+    for item in "${arr[@]}"; do
+      local escaped="$(yaml_escape "$item")"
+      echo "  - \"$escaped\""
+    done
+  fi
+}
+
+TARGET_DIRS_YAML="$(build_yaml_array "${TARGET_DIRS[@]}")"
+TARGET_FILES_YAML="$(build_yaml_array "${TARGET_FILES[@]}")"
+
+# Create state file
+{
+  echo "---"
+  echo "active: true"
+  echo "iteration: 1"
+  echo "max_iterations: $MAX_ITERATIONS"
+  echo -n "target_dirs:"
+  if [[ ${#TARGET_DIRS[@]} -eq 0 ]]; then
+    echo " []"
+  else
+    echo ""
+    for dir in "${TARGET_DIRS[@]}"; do
+      echo "  - \"$(yaml_escape "$dir")\""
+    done
+  fi
+  echo -n "target_files:"
+  if [[ ${#TARGET_FILES[@]} -eq 0 ]]; then
+    echo " []"
+  else
+    echo ""
+    for file in "${TARGET_FILES[@]}"; do
+      echo "  - \"$(yaml_escape "$file")\""
+    done
+  fi
+  echo "goal: \"$GOAL_ESC\""
+  echo "eval_cmd: $EVAL_CMD_YAML"
+  echo "cmd: $CMD_YAML"
+  echo "model: $MODEL_YAML"
+  echo "started_at: \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\""
+  echo "---"
+  echo " "
+  echo "GPTDiff loop is active."
+  echo " "
+  echo "Please reply with a short progress note (or just \`ok\`) and then stop."
+  echo "To cancel: /stop"
+} > .claude/start.local.md
 
 cat <<EOF
 
@@ -155,10 +215,33 @@ cat <<EOF
 ║                    🔁 GPTDIFF LOOP ACTIVATED                     ║
 ╚══════════════════════════════════════════════════════════════════╝
 
-📁 Target:      $TARGET_DIR/
-🎯 Goal:        $GOAL
-🔄 Iterations:  $(if [[ "$MAX_ITERATIONS" -gt 0 ]]; then echo "1 of $MAX_ITERATIONS"; else echo "unlimited"; fi)
 EOF
+
+# Show targets
+if [[ ${#TARGET_DIRS[@]} -gt 0 ]]; then
+  if [[ ${#TARGET_DIRS[@]} -eq 1 ]]; then
+    echo "📁 Directory:   ${TARGET_DIRS[0]}/"
+  else
+    echo "📁 Directories:"
+    for dir in "${TARGET_DIRS[@]}"; do
+      echo "                - $dir/"
+    done
+  fi
+fi
+
+if [[ ${#TARGET_FILES[@]} -gt 0 ]]; then
+  if [[ ${#TARGET_FILES[@]} -eq 1 ]]; then
+    echo "📄 File:        ${TARGET_FILES[0]}"
+  else
+    echo "📄 Files:"
+    for file in "${TARGET_FILES[@]}"; do
+      echo "                - $file"
+    done
+  fi
+fi
+
+echo "🎯 Goal:        $GOAL"
+echo "🔄 Iterations:  $(if [[ "$MAX_ITERATIONS" -gt 0 ]]; then echo "1 of $MAX_ITERATIONS"; else echo "unlimited"; fi)"
 
 if [[ "$CMD_YAML" != "null" ]]; then
   echo "🔧 Verify cmd:  $CMD"
@@ -176,7 +259,7 @@ cat <<EOF
 │  The loop will now run automatically via the Stop hook.        │
 │  Each iteration: analyze → improve → verify → repeat           │
 │                                                                 │
-│  To cancel anytime:  /stop                       │
-│  To check progress:  cat .claude/start.local.md          │
+│  To cancel anytime:  /stop                                      │
+│  To check progress:  cat .claude/start.local.md                 │
 └─────────────────────────────────────────────────────────────────┘
 EOF

@@ -17,8 +17,8 @@ Check the current loop status by running these commands:
 3. **If loop is active**, also check for background job:
    ```
    ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-   TARGET_SLUG=$(grep '^target_dir:' "$ROOT/.claude/start.local.md" 2>/dev/null | sed 's/target_dir: *//' | sed 's/^"\(.*\)"$/\1/' | sed 's#[^A-Za-z0-9._-]#_#g')
-   PENDING="$ROOT/.claude/start/$TARGET_SLUG/pending"
+   # Find any pending file in the start directory
+   PENDING=$(find "$ROOT/.claude/start" -name "pending" 2>/dev/null | head -1)
    if [[ -f "$PENDING" ]]; then
      PID=$(cat "$PENDING")
      if kill -0 "$PID" 2>/dev/null; then
@@ -37,9 +37,10 @@ Check the current loop status by running these commands:
    ```
 
 5. **Report status** with a visual summary:
-   - Extract iteration, max_iterations, target_dir, goal from the frontmatter
+   - Extract iteration, max_iterations, target_dirs, target_files, goal from the frontmatter
    - Build a progress bar: ●●●○○○○○○○ style
    - Show: iteration X of Y (Z remaining)
+   - Show the targets (directories and/or files)
    - Show the goal
    - **If BACKGROUND_JOB=running**: Show "⏳ External LLM processing in background (PID X)"
    - **If BACKGROUND_JOB=finished**: Show "✅ Background job finished - next iteration will pick up results"
