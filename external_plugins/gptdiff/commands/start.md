@@ -1,69 +1,73 @@
 ---
 description: "Start a GPTDiff-powered agent loop on directories or files"
-argument-hint: "--dir PATH [--dir PATH2] [--file FILE] --goal '...' [--max-iterations N]"
+argument-hint: "<goal> | --dir PATH --goal '...' [--max-iterations N]"
 allowed-tools: ["Bash", "Glob", "Read", "AskUserQuestion"]
 ---
 
 # GPTDiff Loop
 
-## If arguments are provided ($ARGUMENTS is not empty):
+## If $ARGUMENTS contains `--dir` or `--file` flags:
 
 Run the setup script directly:
 ```
 /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh $ARGUMENTS
 ```
 
-## If NO arguments provided (empty $ARGUMENTS):
+## If $ARGUMENTS is a plain goal (no flags) like "make the game better":
 
-Help the user configure the loop interactively:
+The user provided a goal directly. Auto-discover the right files:
 
-1. **Check inference mode** - Run this to detect environment:
+1. **Discover the project structure**:
    ```bash
-   echo "GPTDIFF_LLM_API_KEY=${GPTDIFF_LLM_API_KEY:+set}"
-   echo "GPTDIFF_MODEL=${GPTDIFF_MODEL:-not set}"
-   echo "GPTDIFF_BASE_URL=${GPTDIFF_BASE_URL:-not set}"
+   ls -d */ 2>/dev/null | head -20
+   ls *.ts *.js *.py *.tsx *.jsx 2>/dev/null | head -10 || true
+   ls package.json pyproject.toml Makefile Cargo.toml go.mod 2>/dev/null || true
    ```
 
-2. **Ask about inference mode** using AskUserQuestion:
-   - **If GPTDIFF_LLM_API_KEY is set**: Ask if they want to use:
-     - "External LLM" - Uses gptdiff API with model: ${GPTDIFF_MODEL:-google/gemini-3-flash-preview-thinking}
-     - "Claude Code" - Uses Claude's own inference (no external API needed)
-   - **If NOT set**: Inform them it will use Claude Code mode.
-     - Mention they can set `GPTDIFF_LLM_API_KEY` for external LLM via nano-gpt.com (set `GPTDIFF_BASE_URL=https://nano-gpt.com/api/v1`)
+2. **Analyze which directories/files are relevant to the goal**:
+   - Look at the goal text and find directories that match
+   - For "game" goals: look for src/, game/, content/, data/, etc.
+   - For "UI" goals: look for components/, ui/, views/, etc.
+   - Read a few key files to confirm they're relevant
+   - Pick 1-3 most relevant directories or files
 
-3. **Discover the project structure**:
+3. **Ask about iterations** using AskUserQuestion:
+   - Show what directories/files you found
+   - Ask: 3 (quick), 5 (medium), 10 (thorough)
+
+4. **Run the setup**:
+   ```
+   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] --goal "THE_GOAL_FROM_ARGUMENTS" --max-iterations N
+   ```
+
+## If NO arguments provided (empty $ARGUMENTS):
+
+Full interactive mode:
+
+1. **Discover the project structure**:
    ```bash
    ls -d */ 2>/dev/null | head -20
    ls package.json pyproject.toml Makefile Cargo.toml go.mod 2>/dev/null || true
    ```
 
-4. **Ask about target directories/files** using AskUserQuestion:
+2. **Ask about target directories/files** using AskUserQuestion:
    - Suggest directories that look like good candidates (src/, lib/, app/, components/, etc.)
-   - User can pick multiple directories or specific files
-   - Use `--dir` for directories, `--file` for individual files
 
-5. **After user picks targets, analyze their contents**:
-   - List files in the chosen directories: `ls -la <dir>/`
-   - Read 2-3 key files to understand what the code does
-   - Identify the domain: UI components? API endpoints? Game content? Data models? Utils?
+3. **After user picks targets, analyze their contents**:
+   - List files: `ls -la <dir>/`
+   - Read 2-3 key files to understand the code
+   - Identify the domain: UI? API? Game content? Data models?
 
-6. **Ask about goal with SPECIFIC, DIRECTIONAL suggestions** based on what you read:
-   - Be specific to the actual content: if you see enemies.ts with 3 enemies, suggest "Add 2-3 new enemy types with unique abilities"
-   - Be directional (add/improve/expand/polish/fix): "Add more upgrade options", "Improve damage scaling", "Expand the skill tree"
-   - Reference actual things in the code: "Add more items like {example from file}", "Balance the {thing you saw}"
-   - Examples of good directional goals:
-     - "Add 3-4 new passive abilities that synergize with existing ones"
-     - "Improve the shop UI with better item previews and sorting"
-     - "Expand enemy variety - add ranged and boss variants"
-     - "Polish the combat feel - add screen shake, hit feedback"
-   - DON'T be generic like "improve code quality" - be specific to what's actually there!
+4. **Ask about goal with SPECIFIC, DIRECTIONAL suggestions**:
+   - Be specific: if you see enemies.ts with 3 enemies, suggest "Add 2-3 new enemy types"
+   - Be directional: "Add more X", "Improve Y", "Expand Z", "Polish W"
+   - Reference actual code: "Add more items like {example}", "Balance the {thing you saw}"
 
-7. **Ask about iterations**:
-   - Iterations: 3 (quick), 5 (medium), 10 (thorough)
+5. **Ask about iterations**: 3 (quick), 5 (medium), 10 (thorough)
 
-8. **Run the setup** with the gathered parameters:
+6. **Run the setup**:
    ```
-   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] [--file FILE] --goal "GOAL" --max-iterations N
+   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N
    ```
 
 ---
