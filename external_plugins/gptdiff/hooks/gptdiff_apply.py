@@ -58,7 +58,7 @@ def main():
     if args.verbose:
         print("Loading project files...", file=sys.stderr)
 
-    files = load_project_files(target_dir)
+    files = load_project_files(target_dir, target_dir)
 
     if not files:
         print("Warning: No files loaded from target directory", file=sys.stderr)
