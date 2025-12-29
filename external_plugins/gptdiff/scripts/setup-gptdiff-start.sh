@@ -24,9 +24,9 @@ OPTIONS:
                                (e.g., screenshot tools, gameplay comparators, test runners)
   --feedback-image PATH        Image file to include in each iteration's context
                                (e.g., screenshot saved by feedback-cmd or external tool)
-  --feedback-agent TYPE        Spawn a specialized agent to review changes each iteration
-                               Types: ux-expert, game-balance, code-quality, performance,
-                               security, accessibility, or "auto" to detect from goal
+  --feedback-agent AGENT       Spawn a specialized agent to review changes each iteration
+                               Use "auto" (Claude decides) or a custom description
+                               (e.g., "security expert", "game balance reviewer")
   --model MODEL                Optional GPTDiff model override
   -h, --help                   Show help
 
@@ -45,13 +45,13 @@ FEEDBACK EXAMPLES:
   /start --dir src --goal "Fix failing tests" \
     --feedback-cmd "npm test 2>&1 | tail -50"
 
-  # Agent-based feedback (UX expert reviews UI changes)
+  # Agent-based feedback (Claude decides what expert to spawn)
   /start --dir game/ui --goal "Improve UI aesthetics" \
-    --feedback-agent ux-expert
-
-  # Auto-detect agent from goal
-  /start --dir game/enemies --goal "Balance enemy difficulty" \
     --feedback-agent auto
+
+  # Custom agent description
+  /start --dir game/enemies --goal "Balance enemy difficulty" \
+    --feedback-agent "game balance expert"
 
 EXAMPLES:
   /start --dir src \

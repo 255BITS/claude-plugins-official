@@ -31,29 +31,25 @@ The user provided a goal directly. Auto-discover the right files:
    - Read a few key files to confirm they're relevant
    - Pick 1-3 most relevant directories or files
 
-3. **Ask about iterations** using AskUserQuestion:
+3. **Ask about configuration** using AskUserQuestion with MULTIPLE questions:
+
+   Ask these in a SINGLE AskUserQuestion call with multiple questions:
+
+   **Question 1: Iterations**
    - Show what directories/files you found
-   - Ask: 3 (quick), 5 (medium), 10 (thorough)
+   - Options: 3 (quick), 5 (medium), 10 (thorough)
 
-4. **Ask about inference mode** using AskUserQuestion:
-   - **Claude Code (Recommended)**: Uses your current Claude Code session to make improvements. No additional API key needed.
-   - **External LLM**: Uses gptdiff's API to call an external LLM (requires `GPTDIFF_LLM_API_KEY` env var).
+   **Question 2: Agent Feedback**
+   - **Auto (Recommended)**: Spawn agents to review changes each iteration (Claude decides what kind based on goal)
+   - **None**: No agent feedback between iterations
 
-   If external LLM is chosen, check if `GPTDIFF_LLM_API_KEY` is set:
-   ```bash
-   echo "${GPTDIFF_LLM_API_KEY:-NOT_SET}"
-   ```
-   If not set, inform the user they need to set it:
-   ```
-   export GPTDIFF_LLM_API_KEY="your-api-key"
-   export GPTDIFF_MODEL="model-name"  # optional
-   ```
+   Note: User can also type a custom agent description like "security expert" or "game designer"
 
-5. **Run the setup**:
+4. **Run the setup**:
    ```
-   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] --goal "THE_GOAL_FROM_ARGUMENTS" --max-iterations N --inference-mode MODE
+   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] --goal "THE_GOAL_FROM_ARGUMENTS" --max-iterations N --feedback-agent AGENT
    ```
-   Where MODE is "claude" (default) or "external" based on user's choice.
+   Where AGENT is "auto", a custom description, or omitted for none.
 
 ## If NO arguments provided (empty $ARGUMENTS):
 
@@ -73,32 +69,30 @@ Full interactive mode:
    - Read 2-3 key files to understand the code
    - Identify the domain: UI? API? Game content? Data models?
 
-4. **Ask about goal with SPECIFIC, DIRECTIONAL suggestions**:
+4. **Ask about configuration** using AskUserQuestion with MULTIPLE questions:
+
+   Ask these in a SINGLE AskUserQuestion call with multiple questions:
+
+   **Question 1: Goal**
    - Be specific: if you see enemies.ts with 3 enemies, suggest "Add 2-3 new enemy types"
    - Be directional: "Add more X", "Improve Y", "Expand Z", "Polish W"
    - Reference actual code: "Add more items like {example}", "Balance the {thing you saw}"
+   - Provide 2-3 suggested goals as options
 
-5. **Ask about iterations**: 3 (quick), 5 (medium), 10 (thorough)
+   **Question 2: Iterations**
+   - Options: 3 (quick), 5 (medium), 10 (thorough)
 
-6. **Ask about inference mode** using AskUserQuestion:
-   - **Claude Code (Recommended)**: Uses your current Claude Code session to make improvements. No additional API key needed.
-   - **External LLM**: Uses gptdiff's API to call an external LLM (requires `GPTDIFF_LLM_API_KEY` env var).
+   **Question 3: Agent Feedback**
+   - **Auto (Recommended)**: Spawn agents to review changes each iteration (Claude decides what kind based on goal)
+   - **None**: No agent feedback between iterations
 
-   If external LLM is chosen, check if `GPTDIFF_LLM_API_KEY` is set:
-   ```bash
-   echo "${GPTDIFF_LLM_API_KEY:-NOT_SET}"
-   ```
-   If not set, inform the user they need to set it:
-   ```
-   export GPTDIFF_LLM_API_KEY="your-api-key"
-   export GPTDIFF_MODEL="model-name"  # optional
-   ```
+   Note: User can also type a custom agent description like "security expert" or "game designer"
 
-7. **Run the setup**:
+5. **Run the setup**:
    ```
-   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N --inference-mode MODE
+   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N --feedback-agent AGENT
    ```
-   Where MODE is "claude" (default) or "external" based on user's choice.
+   Where AGENT is "auto", a custom description, or omitted for none.
 
 ---
 

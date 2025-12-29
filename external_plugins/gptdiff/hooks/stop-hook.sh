@@ -616,65 +616,28 @@ $img
 
   # Build agent feedback instruction if feedback_agent is set
   AGENT_INSTRUCTION=""
-  RESOLVED_AGENT="$FEEDBACK_AGENT"
 
-  # Auto-detect agent type from goal keywords
-  if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
-    GOAL_LOWER="$(echo "$GOAL" | tr '[:upper:]' '[:lower:]')"
-    if [[ "$GOAL_LOWER" =~ (ui|ux|interface|design|layout|visual|aesthetic|button|menu|screen) ]]; then
-      RESOLVED_AGENT="ux-expert"
-    elif [[ "$GOAL_LOWER" =~ (balance|difficulty|enemy|damage|health|stats|level|progression|gameplay) ]]; then
-      RESOLVED_AGENT="game-balance"
-    elif [[ "$GOAL_LOWER" =~ (performance|speed|optimize|fast|slow|memory|cpu|latency) ]]; then
-      RESOLVED_AGENT="performance"
-    elif [[ "$GOAL_LOWER" =~ (security|auth|password|token|vulnerability|xss|injection|csrf) ]]; then
-      RESOLVED_AGENT="security"
-    elif [[ "$GOAL_LOWER" =~ (accessibility|a11y|screen.reader|aria|wcag|contrast) ]]; then
-      RESOLVED_AGENT="accessibility"
-    elif [[ "$GOAL_LOWER" =~ (quality|refactor|clean|maintainable|readable|test) ]]; then
-      RESOLVED_AGENT="code-quality"
+  # If feedback_agent is "auto" or any custom value, enable agent feedback
+  if [[ -n "$FEEDBACK_AGENT" ]]; then
+    # User can pass "auto" to let Claude decide, or a custom description like "security expert"
+    if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
+      AGENT_DESCRIPTION="Based on the goal, decide what kind of expert review would be most valuable (e.g., UX review for UI work, balance review for game mechanics, security review for auth code, etc.)"
     else
-      RESOLVED_AGENT=""  # No auto-detection match
+      # User provided a custom agent description
+      AGENT_DESCRIPTION="$FEEDBACK_AGENT"
     fi
-  fi
-
-  # Define agent persona prompts
-  if [[ -n "$RESOLVED_AGENT" ]]; then
-    case "$RESOLVED_AGENT" in
-      ux-expert)
-        AGENT_PERSONA="You are a UX/UI expert. Review the code changes for: visual hierarchy, user flow, accessibility basics, consistency with design patterns, intuitive interactions, and potential usability issues. Focus on the user experience impact."
-        ;;
-      game-balance)
-        AGENT_PERSONA="You are a game balance expert. Review the code changes for: difficulty curve, stat balance, progression pacing, potential exploits, player fairness, and fun factor. Consider how changes affect different player skill levels."
-        ;;
-      code-quality)
-        AGENT_PERSONA="You are a code quality expert. Review for: maintainability, readability, SOLID principles, appropriate abstractions, test coverage gaps, potential bugs, and adherence to best practices."
-        ;;
-      performance)
-        AGENT_PERSONA="You are a performance expert. Review for: algorithmic complexity, memory usage, unnecessary computations, caching opportunities, async/await patterns, and potential bottlenecks."
-        ;;
-      security)
-        AGENT_PERSONA="You are a security expert. Review for: input validation, authentication/authorization issues, injection vulnerabilities, sensitive data exposure, OWASP top 10 risks, and secure coding practices."
-        ;;
-      accessibility)
-        AGENT_PERSONA="You are an accessibility expert. Review for: WCAG compliance, screen reader compatibility, keyboard navigation, color contrast, focus management, and semantic HTML usage."
-        ;;
-      *)
-        AGENT_PERSONA="You are an expert reviewer. Analyze the code changes and provide specific, actionable feedback."
-        ;;
-    esac
 
     AGENT_INSTRUCTION="
 6. **Get expert feedback** - After making changes, spawn a feedback agent:
-   Use the Task tool with subagent_type=\"general-purpose\" and this prompt:
-   \"$AGENT_PERSONA
+   Use the Task tool to get specialized review of your changes.
 
-   Review the recent changes in: $TARGETS_DISPLAY
-   Goal: $GOAL
+   Agent guidance: $AGENT_DESCRIPTION
 
-   Provide specific, actionable feedback. Save any analysis to $LOOP_DIR/agent-feedback.txt\"
+   The agent should review the changes in: $TARGETS_DISPLAY
+   Goal context: $GOAL
 
-   Include the agent's feedback in your summary."
+   Save the agent's feedback to: $LOOP_DIR/agent-feedback.txt
+   Include key insights in your summary."
   fi
 
   REASON_PROMPT="

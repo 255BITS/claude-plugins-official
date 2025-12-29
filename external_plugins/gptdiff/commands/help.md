@@ -16,7 +16,11 @@ Run iterative improvement loops on a directory:
 
 ### /start
 
-Start the loop. Run without arguments for interactive setup.
+Start the loop. Run without arguments for **interactive setup** that asks about:
+- Target directories/files
+- Goal (with smart suggestions based on code analysis)
+- Number of iterations (3/5/10)
+- Agent mode (auto, ux-expert, game-balance, code-quality, or none)
 
 **Options:**
 - `--dir PATH` - Target directory (can specify multiple)
@@ -25,7 +29,7 @@ Start the loop. Run without arguments for interactive setup.
 - `--max-iterations N` - Stop after N iterations (default: 3)
 - `--feedback-cmd CMD` - Run after each iteration, output feeds into next
 - `--feedback-image PATH` - Image file to include in each iteration
-- `--feedback-agent TYPE` - Spawn expert agent to review changes (ux-expert, game-balance, code-quality, performance, security, accessibility, or "auto")
+- `--feedback-agent AGENT` - Spawn expert agent to review changes ("auto" lets Claude decide, or pass a custom description)
 - `--eval-cmd CMD` - Optional evaluator command (signals only)
 - `--inference-mode MODE` - "claude" (default) or "external" LLM
 
@@ -43,9 +47,13 @@ Start the loop. Run without arguments for interactive setup.
   --feedback-cmd "screenshot-tool /tmp/ui.png" \
   --feedback-image /tmp/ui.png --max-iterations 5
 
-# Expert agent feedback (auto-detect type)
+# Expert agent feedback (Claude decides what expert to spawn)
 /start --dir game/enemies --goal "Balance difficulty" \
   --feedback-agent auto --max-iterations 5
+
+# Custom agent description
+/start --dir src/auth --goal "Harden authentication" \
+  --feedback-agent "security expert" --max-iterations 3
 ```
 
 ### /status
@@ -84,14 +92,15 @@ This lets Claude decide what feedback to gather without pre-configuring commands
 
 Use `--feedback-agent` to have Claude spawn a specialized agent each iteration:
 
-- **ux-expert**: UI/UX review - usability, visual hierarchy, user flow
-- **game-balance**: Game mechanics - difficulty curves, stat balance, exploits
-- **code-quality**: Code review - maintainability, best practices, bugs
-- **performance**: Performance review - bottlenecks, memory, complexity
-- **security**: Security review - vulnerabilities, OWASP risks
-- **accessibility**: A11y review - WCAG, screen readers, keyboard nav
+- **auto**: Claude decides what kind of expert review is most valuable based on the goal
+- **custom**: Pass any description like "security expert", "game designer", "UX reviewer"
 
-Use `--feedback-agent auto` to detect the agent type from goal keywords.
+Examples:
+```
+--feedback-agent auto
+--feedback-agent "security expert focusing on auth"
+--feedback-agent "game balance reviewer"
+```
 
 ## Logs
 
