@@ -253,6 +253,17 @@ if [[ "$MODEL_YAML" != "null" ]]; then
   echo "🤖 Model:       $MODEL"
 fi
 
+# Compute the log directory slug (same as stop-hook.sh)
+ALL_TARGETS=""
+for dir in "${TARGET_DIRS[@]}"; do
+  ALL_TARGETS+="$dir"$'\n'
+done
+for file in "${TARGET_FILES[@]}"; do
+  ALL_TARGETS+="$file"$'\n'
+done
+LOG_SLUG="$(echo "$ALL_TARGETS" | md5sum | cut -c1-12)"
+echo "📝 Logs:        .claude/start/$LOG_SLUG/"
+
 cat <<EOF
 
 ┌─────────────────────────────────────────────────────────────────┐
@@ -260,6 +271,6 @@ cat <<EOF
 │  Each iteration: analyze → improve → verify → repeat           │
 │                                                                 │
 │  To cancel anytime:  /stop                                      │
-│  To check progress:  cat .claude/start.local.md                 │
+│  To check progress:  /status                                    │
 └─────────────────────────────────────────────────────────────────┘
 EOF

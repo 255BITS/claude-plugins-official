@@ -75,7 +75,7 @@ def main():
         if target_files:
             print(f"Target files: {', '.join(target_files)}", file=sys.stderr)
         print(f"Model: {args.model or 'default'}", file=sys.stderr)
-        print(f"Goal length: {len(goal)} chars", file=sys.stderr)
+        print(f"Goal length: ~{len(goal) // 4} tokens", file=sys.stderr)
 
     # Load project files from all targets
     if args.verbose:
@@ -107,7 +107,7 @@ def main():
     environment = build_environment(files)
 
     if args.verbose:
-        print(f"Environment size: {len(environment)} chars", file=sys.stderr)
+        print(f"Environment size: ~{len(environment) // 4} tokens", file=sys.stderr)
 
     # Generate diff with heartbeat to prevent timeout
     print("📤 Sending to LLM...", file=sys.stderr)
