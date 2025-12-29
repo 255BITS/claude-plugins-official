@@ -19,7 +19,6 @@ OPTIONS:
   --goal TEXT                  Goal prompt for GPTDiff (required)
   --max-iterations N           Stop after N iterations (default: 3, 0 = unlimited)
   --eval-cmd CMD               Optional evaluator command (signals only)
-  --cmd CMD                    Optional verification command (runs each iteration)
   --model MODEL                Optional GPTDiff model override
   -h, --help                   Show help
 
@@ -42,7 +41,6 @@ TARGET_FILES=()
 GOAL=""
 MAX_ITERATIONS="3"
 EVAL_CMD="null"
-CMD="null"
 MODEL="null"
 
 while [[ $# -gt 0 ]]; do
@@ -69,10 +67,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --eval-cmd)
       EVAL_CMD="${2:-}"
-      shift 2
-      ;;
-    --cmd)
-      CMD="${2:-}"
       shift 2
       ;;
     --model)
@@ -141,13 +135,6 @@ else
   EVAL_CMD_YAML="null"
 fi
 
-if [[ -n "${CMD:-}" ]] && [[ "$CMD" != "null" ]]; then
-  CMD_ESC="$(yaml_escape "$CMD")"
-  CMD_YAML="\"$CMD_ESC\""
-else
-  CMD_YAML="null"
-fi
-
 if [[ -n "${MODEL:-}" ]] && [[ "$MODEL" != "null" ]]; then
   MODEL_ESC="$(yaml_escape "$MODEL")"
   MODEL_YAML="\"$MODEL_ESC\""
@@ -198,7 +185,6 @@ TARGET_FILES_YAML="$(build_yaml_array "${TARGET_FILES[@]}")"
   fi
   echo "goal: \"$GOAL_ESC\""
   echo "eval_cmd: $EVAL_CMD_YAML"
-  echo "cmd: $CMD_YAML"
   echo "model: $MODEL_YAML"
   echo "started_at: \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\""
   echo "---"
@@ -243,9 +229,6 @@ fi
 echo "🎯 Goal:        $GOAL"
 echo "🔄 Iterations:  $(if [[ "$MAX_ITERATIONS" -gt 0 ]]; then echo "1 of $MAX_ITERATIONS"; else echo "unlimited"; fi)"
 
-if [[ "$CMD_YAML" != "null" ]]; then
-  echo "🔧 Verify cmd:  $CMD"
-fi
 if [[ "$EVAL_CMD_YAML" != "null" ]]; then
   echo "📊 Eval cmd:    $EVAL_CMD"
 fi

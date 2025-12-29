@@ -96,7 +96,6 @@ yaml_get_array() {
 ITERATION="$(strip_yaml_quotes "$(yaml_get_raw iteration)")"
 MAX_ITERATIONS="$(strip_yaml_quotes "$(yaml_get_raw max_iterations)")"
 GOAL="$(yaml_unescape "$(strip_yaml_quotes "$(yaml_get_raw goal)")")"
-CMD_RAW="$(yaml_get_raw cmd)"
 EVAL_CMD_RAW="$(yaml_get_raw eval_cmd)"
 MODEL_RAW="$(yaml_get_raw model)"
 
@@ -110,12 +109,10 @@ if [[ -n "$LEGACY_TARGET_DIR" ]] && [[ -z "$TARGET_DIRS_STR" ]]; then
   TARGET_DIRS_STR="$LEGACY_TARGET_DIR"
 fi
 
-CMD="$(yaml_unescape "$(strip_yaml_quotes "$CMD_RAW")")"
 EVAL_CMD="$(yaml_unescape "$(strip_yaml_quotes "$EVAL_CMD_RAW")")"
 MODEL="$(yaml_unescape "$(strip_yaml_quotes "$MODEL_RAW")")"
 
 # Normalize null-like values
-if [[ "${CMD_RAW:-}" == "null" ]] || [[ -z "${CMD:-}" ]]; then CMD=""; fi
 if [[ "${EVAL_CMD_RAW:-}" == "null" ]] || [[ -z "${EVAL_CMD:-}" ]]; then EVAL_CMD=""; fi
 if [[ "${MODEL_RAW:-}" == "null" ]] || [[ -z "${MODEL:-}" ]]; then MODEL=""; fi
 
@@ -193,7 +190,6 @@ LOOP_DIR="$ROOT_DIR/.claude/start/$TARGET_SLUG"
 mkdir -p "$LOOP_DIR"
 
 EVAL_LOG="$LOOP_DIR/eval.log"
-CMD_LOG="$LOOP_DIR/cmd.log"
 GPTDIFF_LOG="$LOOP_DIR/gptdiff.log"
 DIFFSTAT_FILE="$LOOP_DIR/diffstat.txt"
 CHANGED_FILES_FILE="$LOOP_DIR/changed-files.txt"
@@ -228,30 +224,10 @@ if [[ -n "$EVAL_CMD" ]]; then
   echo "" >> "$EVAL_LOG"
 fi
 
-# Optional command (runs each iteration for verification/feedback, does NOT gate)
-CMD_EXIT=0
-if [[ -n "$CMD" ]]; then
-  append_header "$CMD_LOG" "CMD"
-  set +e
-  (
-    cd "$ROOT_DIR" || exit 127
-    GPTDIFF_LOOP_TARGETS="$TARGETS_DISPLAY" bash -lc "$CMD"
-  ) >> "$CMD_LOG" 2>&1
-  CMD_EXIT=$?
-  set -e
-  echo "" >> "$CMD_LOG"
-  # Command output is used as feedback signal, but does NOT stop the loop
-fi
-
-# Build the goal prompt with eval/cmd signals
+# Build the goal prompt with eval signals
 EVAL_TAIL=""
 if [[ -f "$EVAL_LOG" ]]; then
   EVAL_TAIL="$(tail -n 80 "$EVAL_LOG" | sed 's/\r$//')"
-fi
-
-CMD_TAIL=""
-if [[ -f "$CMD_LOG" ]]; then
-  CMD_TAIL="$(tail -n 80 "$CMD_LOG" | sed 's/\r$//')"
 fi
 
 # Get list of files in target directories/files (using gptdiff's .gptignore-aware loader)
@@ -292,9 +268,6 @@ CONSTRAINTS:
 SIGNALS (optional):
 --- eval (tail) ---
 $EVAL_TAIL
-
---- cmd (tail) ---
-$CMD_TAIL
 "
 
 # Run the appropriate inference mode
@@ -440,7 +413,6 @@ if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
 **Progress:** $ITER_INFO
 **gptdiff exit:** $GPTDIFF_EXIT
 **eval exit:** $EVAL_EXIT
-**cmd exit:** $CMD_EXIT
 
 ### Changed files
 \`\`\`
@@ -485,8 +457,6 @@ $FILE_LIST
 
 ### Signals from evaluators
 $(if [[ -n "$EVAL_TAIL" ]]; then echo "**Eval output (tail):**"; echo '```'; echo "$EVAL_TAIL"; echo '```'; else echo "_No eval command configured_"; fi)
-
-$(if [[ -n "$CMD_TAIL" ]]; then echo "**Cmd output (tail):**"; echo '```'; echo "$CMD_TAIL"; echo '```'; else echo "_No cmd configured_"; fi)
 
 ### Recent changes
 $(if [[ -n "$CHANGED_FILES_PREVIEW" ]]; then echo '```'; echo "$CHANGED_FILES_PREVIEW"; echo '```'; else echo "_No changes yet_"; fi)

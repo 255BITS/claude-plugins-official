@@ -1,6 +1,6 @@
 ---
 description: "Start a GPTDiff-powered agent loop on directories or files"
-argument-hint: "--dir PATH [--dir PATH2] [--file FILE] --goal '...' [--max-iterations N] [--cmd '...']"
+argument-hint: "--dir PATH [--dir PATH2] [--file FILE] --goal '...' [--max-iterations N]"
 allowed-tools: ["Bash", "Glob", "Read", "AskUserQuestion"]
 ---
 
@@ -58,13 +58,12 @@ Help the user configure the loop interactively:
      - "Polish the combat feel - add screen shake, hit feedback"
    - DON'T be generic like "improve code quality" - be specific to what's actually there!
 
-7. **Ask about iterations and command**:
+7. **Ask about iterations**:
    - Iterations: 3 (quick), 5 (medium), 10 (thorough)
-   - Command: Based on project type, or "None"
 
 8. **Run the setup** with the gathered parameters:
    ```
-   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] [--file FILE] --goal "GOAL" --max-iterations N [--cmd "CMD"]
+   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] [--file FILE] --goal "GOAL" --max-iterations N
    ```
 
 ---
