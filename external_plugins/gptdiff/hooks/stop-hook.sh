@@ -628,16 +628,18 @@ $img
     fi
 
     AGENT_INSTRUCTION="
-6. **Get expert feedback** - After making changes, spawn a feedback agent:
-   Use the Task tool to get specialized review of your changes.
+6. **REQUIRED: Spawn expert agent** - You MUST spawn a feedback agent this iteration:
+   Use the Task tool with subagent_type=\"general-purpose\" to get expert review.
 
-   Agent guidance: $AGENT_DESCRIPTION
+   Agent role: $AGENT_DESCRIPTION
 
-   The agent should review the changes in: $TARGETS_DISPLAY
-   Goal context: $GOAL
+   Prompt the agent to:
+   - Review the code in: $TARGETS_DISPLAY
+   - Consider the goal: $GOAL
+   - Provide specific, actionable feedback
+   - Save feedback to: $LOOP_DIR/agent-feedback.txt
 
-   Save the agent's feedback to: $LOOP_DIR/agent-feedback.txt
-   Include key insights in your summary."
+   Include the agent's key insights in your summary. Do NOT skip this step."
   fi
 
   REASON_PROMPT="
