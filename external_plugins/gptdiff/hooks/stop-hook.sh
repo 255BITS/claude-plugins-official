@@ -629,9 +629,7 @@ $img
 
     AGENT_INSTRUCTION="
 6. **REQUIRED: Spawn expert agent** - You MUST spawn a feedback agent this iteration:
-   Use the Task tool with subagent_type=\"general-purpose\" to get expert review.
-
-   Agent role: $AGENT_DESCRIPTION
+   $AGENT_DESCRIPTION
 
    Prompt the agent to:
    - Review the code in: $TARGETS_DISPLAY
