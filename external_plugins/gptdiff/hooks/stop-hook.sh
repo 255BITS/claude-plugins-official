@@ -619,17 +619,39 @@ $img
 
   # If feedback_agent is "auto" or any custom value, enable agent feedback
   if [[ -n "$FEEDBACK_AGENT" ]]; then
-    # User can pass "auto" to let Claude decide, or a custom description like "security expert"
-    if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
-      AGENT_DESCRIPTION="Pick the best-matching agent from your available agents for the NEXT subgoal toward the goal. Use the Task tool to spawn the agent directly by name."
-    else
-      # User provided a custom agent description
-      AGENT_DESCRIPTION="$FEEDBACK_AGENT"
+    # Discover available agents from plugins
+    # Path from hooks -> gptdiff -> external_plugins -> claude-plugins-official -> plugins
+    PLUGINS_DIR="${CLAUDE_PLUGINS_DIR:-$(dirname "$PLUGIN_HOOKS_DIR")/../../plugins}"
+    AGENTS_CATALOG=""
+
+    if [[ -d "$PLUGINS_DIR" ]]; then
+      # Get human-readable catalog of agent names and descriptions
+      AGENTS_CATALOG="$(python3 "$PLUGIN_HOOKS_DIR/list_agents.py" --plugins-dir "$PLUGINS_DIR" --catalog 2>/dev/null || true)"
     fi
 
-    AGENT_INSTRUCTION="
+    if [[ "$FEEDBACK_AGENT" == "auto" ]] && [[ -n "$AGENTS_CATALOG" ]]; then
+      # Auto mode: use agents already registered in Claude Code session
+      AGENT_INSTRUCTION="
+6. **REQUIRED: Spawn expert agent** - You MUST spawn a feedback agent this iteration.
+
+   **Available agents (from /agents):**
+$AGENTS_CATALOG
+
+   **How to invoke:**
+   1. Pick the agent best suited for the NEXT subgoal toward the goal
+   2. Use the Task tool with that agent's name as \`subagent_type\`
+   3. The agent's full prompt is already loaded - just provide context:
+      - Files to review: \`$TARGETS_DISPLAY\`
+      - Overall goal: $GOAL
+      - Request specific, actionable feedback for the next iteration
+      - Write feedback to: \`$LOOP_DIR/agent-feedback.txt\`
+
+   Include the agent's key insights in your summary. Do NOT skip this step."
+    elif [[ -n "$FEEDBACK_AGENT" ]]; then
+      # User specified a custom agent name or description
+      AGENT_INSTRUCTION="
 6. **REQUIRED: Spawn expert agent** - You MUST spawn a feedback agent this iteration:
-   $AGENT_DESCRIPTION
+   Agent: $FEEDBACK_AGENT
 
    Prompt the agent to:
    - Review the code in: $TARGETS_DISPLAY
@@ -638,6 +660,7 @@ $img
    - Save feedback to: $LOOP_DIR/agent-feedback.txt
 
    Include the agent's key insights in your summary. Do NOT skip this step."
+    fi
   fi
 
   REASON_PROMPT="
