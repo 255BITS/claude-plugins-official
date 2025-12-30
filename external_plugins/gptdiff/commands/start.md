@@ -19,9 +19,12 @@ The user provided a goal directly. **YOU MUST spawn an agent to analyze the proj
 
 1. **REQUIRED: Spawn an agent for project analysis FIRST**:
 
-   Use the Task tool with `subagent_type="Explore"` IMMEDIATELY.
+   Look at your available agents (from your system prompt's Task tool section).
+   Pick the one best suited for analyzing a project with goal: "$ARGUMENTS"
 
-   Prompt:
+   Use the Task tool IMMEDIATELY with that agent's name as `subagent_type`.
+
+   Prompt the agent:
    ```
    Analyze this project for the goal: "$ARGUMENTS"
 
@@ -59,9 +62,12 @@ Full interactive mode. **YOU MUST spawn an agent to analyze the project.**
 
 1. **REQUIRED: Spawn an agent for comprehensive project analysis FIRST**:
 
-   Use the Task tool with `subagent_type="Explore"` IMMEDIATELY.
+   Look at your available agents (from your system prompt's Task tool section).
+   Pick the one best suited for exploring and analyzing a codebase.
 
-   Prompt:
+   Use the Task tool IMMEDIATELY with that agent's name as `subagent_type`.
+
+   Prompt the agent:
    ```
    Analyze this project comprehensively:
 
