@@ -620,13 +620,71 @@ $img
 
   # If feedback_agent is "auto" or any custom value, enable agent feedback
   if [[ -n "$FEEDBACK_AGENT" ]]; then
-    if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
-      # Auto mode: Claude picks from its available agents
-      AGENT_INSTRUCTION="
-6. **REQUIRED: Spawn expert agent** - You MUST spawn a feedback agent this iteration.
+    if [[ "$ITERATION" -eq 1 ]]; then
+      # ITERATION 1: Spawn agent FIRST to analyze initial state and guide first improvement
+      if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
+        AGENT_INSTRUCTION="
+### ⚠️ ITERATION 1: Spawn expert agent FIRST
+
+**BEFORE making any changes**, you MUST spawn an agent to analyze the initial state.
+
+1. Check your available agents (Task tool)
+2. Pick the one best suited for the goal
+3. Spawn it with this prompt:
+
+   \`\`\`
+   Analyze the initial state of: $TARGETS_DISPLAY
+   Goal: $GOAL
+
+   This is iteration 1 - no changes have been made yet.
+   Review the current code and provide:
+   1. Assessment of current state
+   2. Priority areas to improve
+   3. Specific first improvement to make
+   4. What to watch out for
+
+   Write your analysis to: $LOOP_DIR/agent-feedback.txt
+   \`\`\`
+
+4. **WAIT for the agent's response**
+5. **THEN** make ONE improvement based on the agent's guidance
+
+Do NOT skip the agent step. Do NOT make changes before the agent analyzes."
+      else
+        AGENT_INSTRUCTION="
+### ⚠️ ITERATION 1: Spawn expert agent FIRST
+
+**BEFORE making any changes**, spawn \`$FEEDBACK_AGENT\` to analyze the initial state.
+
+Use Task tool with \`subagent_type: \"$FEEDBACK_AGENT\"\`
+
+Prompt:
+\`\`\`
+Analyze the initial state of: $TARGETS_DISPLAY
+Goal: $GOAL
+
+This is iteration 1 - no changes have been made yet.
+Review the current code and provide:
+1. Assessment of current state
+2. Priority areas to improve
+3. Specific first improvement to make
+4. What to watch out for
+
+Write your analysis to: $LOOP_DIR/agent-feedback.txt
+\`\`\`
+
+**WAIT for the agent's response, THEN make ONE improvement based on their guidance.**
+
+Do NOT skip the agent step. Do NOT make changes before the agent analyzes."
+      fi
+    else
+      # ITERATIONS 2+: Make improvement, then spawn agent for feedback
+      if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
+        AGENT_INSTRUCTION="
+6. **REQUIRED: Spawn expert agent** - After making your improvement, spawn a feedback agent.
 
    **How to invoke:**
-   1. Check your available agents (the ones you can use with the Task tool)
+   1. Check your available agents (Task tool)
    2. Pick the agent best suited for the NEXT subgoal toward the goal
    3. Use the Task tool with that agent's name as \`subagent_type\`
    4. In your prompt, provide context:
@@ -635,13 +693,12 @@ $img
       - Request specific, actionable feedback for the next iteration
       - Write feedback to: \`$LOOP_DIR/agent-feedback.txt\`
 
-   If no specialized agent fits, use \`general-purpose\` with a detailed prompt describing the expertise needed.
+   If no specialized agent fits, use \`general-purpose\` with a detailed prompt.
 
    Include the agent's key insights in your summary. Do NOT skip this step."
-    else
-      # User specified a specific agent name
-      AGENT_INSTRUCTION="
-6. **REQUIRED: Spawn expert agent** - You MUST spawn a feedback agent this iteration.
+      else
+        AGENT_INSTRUCTION="
+6. **REQUIRED: Spawn expert agent** - After making your improvement, spawn \`$FEEDBACK_AGENT\`.
 
    Use the Task tool with \`subagent_type: \"$FEEDBACK_AGENT\"\`
 
@@ -652,6 +709,7 @@ $img
    - Write feedback to: \`$LOOP_DIR/agent-feedback.txt\`
 
    Include the agent's key insights in your summary. Do NOT skip this step."
+      fi
     fi
   fi
 
