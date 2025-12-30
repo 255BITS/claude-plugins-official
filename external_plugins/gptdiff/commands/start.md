@@ -1,7 +1,7 @@
 ---
 description: "Start a GPTDiff-powered agent loop on directories or files"
 argument-hint: "<goal> | --dir PATH --goal '...' [--feedback-cmd CMD] [--max-iterations N]"
-allowed-tools: ["Bash", "Glob", "Read", "AskUserQuestion"]
+allowed-tools: ["Bash", "Glob", "Read", "AskUserQuestion", "Task"]
 ---
 
 # GPTDiff Loop
@@ -24,14 +24,23 @@ The user provided a goal directly. Auto-discover the right files:
    ls package.json pyproject.toml Makefile Cargo.toml go.mod 2>/dev/null || true
    ```
 
-2. **Analyze which directories/files are relevant to the goal**:
-   - Look at the goal text and find directories that match
-   - For "game" goals: look for src/, game/, content/, data/, etc.
-   - For "UI" goals: look for components/, ui/, views/, etc.
-   - Read a few key files to confirm they're relevant
-   - Pick 1-3 most relevant directories or files
+2. **Spawn expert agent for project analysis**:
+   Use the Task tool with subagent_type="general-purpose" to analyze the project.
 
-3. **Ask about configuration** using AskUserQuestion with MULTIPLE questions:
+   Prompt the agent to:
+   - Explore the project structure and identify the domain (game, web app, API, CLI tool, library, etc.)
+   - Find directories/files most relevant to the goal: "$ARGUMENTS"
+   - Recommend 1-3 target directories or files for the improvement loop
+   - Suggest what type of expert feedback would be most valuable (UX, game balance, security, performance, etc.)
+   - Return a JSON-like summary: `{targets: [...], expert_type: "...", rationale: "..."}`
+
+   The agent should auto-determine its role based on what it discovers (e.g., if it finds game code, act as a game design expert; if it finds UI components, act as a UX expert).
+
+3. **Use the agent's analysis to inform your questions**:
+   - Use the suggested targets as defaults
+   - Use the suggested expert_type for the agent feedback question
+
+4. **Ask about configuration** using AskUserQuestion with MULTIPLE questions:
 
    Ask these in a SINGLE AskUserQuestion call with multiple questions:
 
@@ -45,7 +54,7 @@ The user provided a goal directly. Auto-discover the right files:
 
    Note: User can also type a custom agent description like "security expert" or "game designer"
 
-4. **Run the setup**:
+5. **Run the setup**:
    ```
    /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] --goal "THE_GOAL_FROM_ARGUMENTS" --max-iterations N --feedback-agent AGENT
    ```
@@ -61,29 +70,45 @@ Full interactive mode:
    ls package.json pyproject.toml Makefile Cargo.toml go.mod 2>/dev/null || true
    ```
 
-2. **Ask about target directories/files** using AskUserQuestion:
-   - Suggest directories that look like good candidates (src/, lib/, app/, components/, etc.)
+2. **Spawn expert agent for comprehensive project analysis**:
+   Use the Task tool with subagent_type="general-purpose" to analyze the entire project.
 
-3. **After user picks targets, analyze their contents**:
-   - List files: `ls -la <dir>/`
-   - Read 2-3 key files to understand the code
-   - Identify the domain: UI? API? Game content? Data models?
+   Prompt the agent to:
+   - Explore the full project structure
+   - Identify the project domain (game, web app, API, CLI tool, library, data pipeline, etc.)
+   - Read key files to understand the codebase
+   - Recommend target directories/files for improvement
+   - Suggest 2-3 specific, actionable goals based on what it finds
+   - Suggest what type of expert feedback would be most valuable
+   - Return a summary: `{domain: "...", targets: [...], suggested_goals: [...], expert_type: "...", rationale: "..."}`
+
+   The agent should auto-determine its expert role based on the project type.
+
+3. **Use the agent's analysis to present informed questions**:
+   - Use the suggested targets for the target directories question
+   - Use the suggested goals as options
+   - Use the suggested expert_type for the agent feedback question
 
 4. **Ask about configuration** using AskUserQuestion with MULTIPLE questions:
 
    Ask these in a SINGLE AskUserQuestion call with multiple questions:
 
-   **Question 1: Goal**
+   **Question 1: Target directories/files**
+   - Pre-select the agent's suggested targets as defaults
+   - Offer other directories as additional options
+
+   **Question 2: Goal**
+   - Use the agent's suggested goals as the main options
    - Be specific: if you see enemies.ts with 3 enemies, suggest "Add 2-3 new enemy types"
    - Be directional: "Add more X", "Improve Y", "Expand Z", "Polish W"
    - Reference actual code: "Add more items like {example}", "Balance the {thing you saw}"
-   - Provide 2-3 suggested goals as options
 
-   **Question 2: Iterations**
+   **Question 3: Iterations**
    - Options: 3 (quick), 5 (medium), 10 (thorough)
 
-   **Question 3: Agent Feedback**
-   - **Auto (Recommended)**: Spawn agents to review changes each iteration (Claude decides what kind based on goal)
+   **Question 4: Agent Feedback**
+   - Pre-select the agent's suggested expert_type as the recommended option
+   - **Auto**: Let Claude decide what kind of expert based on goal
    - **None**: No agent feedback between iterations
 
    Note: User can also type a custom agent description like "security expert" or "game designer"
