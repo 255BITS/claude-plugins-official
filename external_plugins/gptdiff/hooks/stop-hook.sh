@@ -695,6 +695,30 @@ $(if [[ -n "$CHANGED_FILES_PREVIEW" ]]; then echo "### Recent changes"; echo '``
 **Make ONE improvement toward the goal, then reply with a brief summary.**"
 fi
 
+# Debug: Write full prompt to log file
+DEBUG_PROMPT_FILE="$LOOP_DIR/debug-prompt.txt"
+{
+  echo "============================================================"
+  echo "DEBUG: Full prompt sent to Claude Code"
+  echo "UTC: $(utc_now)"
+  echo "Iteration: $ITERATION"
+  echo "============================================================"
+  echo ""
+  echo "=== SYSTEM MESSAGE ==="
+  echo "$SYSTEM_MSG"
+  echo ""
+  echo "=== REASON PROMPT ==="
+  echo "$REASON_PROMPT"
+  echo ""
+  echo "=== AGENT INSTRUCTION (if any) ==="
+  echo "$AGENT_INSTRUCTION"
+  echo ""
+  echo "=== AGENTS CATALOG (if discovered) ==="
+  echo "${AGENTS_CATALOG:-<none>}"
+  echo ""
+} > "$DEBUG_PROMPT_FILE"
+echo "📝 Debug prompt written to: $DEBUG_PROMPT_FILE" >&2
+
 # Block stop and feed prompt back
 jq -n \
   --arg prompt "$REASON_PROMPT" \
