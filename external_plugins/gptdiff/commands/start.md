@@ -15,25 +15,27 @@ Run the setup script directly:
 
 ## If $ARGUMENTS is a plain goal (no flags) like "make the game better":
 
-The user provided a goal directly. Auto-discover the right files:
+The user provided a goal directly. **YOU MUST spawn an agent to analyze the project.**
 
-1. **Discover the project structure**:
-   ```bash
-   ls -d */ 2>/dev/null | head -20
-   ls *.ts *.js *.py *.tsx *.jsx 2>/dev/null | head -10 || true
-   ls package.json pyproject.toml Makefile Cargo.toml go.mod 2>/dev/null || true
+1. **REQUIRED: Spawn an agent for project analysis FIRST**:
+
+   Use the Task tool with `subagent_type="Explore"` IMMEDIATELY.
+
+   Prompt:
+   ```
+   Analyze this project for the goal: "$ARGUMENTS"
+
+   1. Explore the project structure - what kind of project is this?
+   2. Identify the domain (game, web app, API, CLI tool, library, etc.)
+   3. Find directories/files most relevant to the goal
+   4. Recommend 1-3 target directories or files for an improvement loop
+
+   Return a summary: {domain: "...", targets: [...], rationale: "..."}
    ```
 
-2. **Spawn an agent for project analysis**:
-   Use the Task tool with `subagent_type="Explore"` to analyze the project.
+   **DO NOT skip this step. DO NOT ask questions before spawning the agent.**
 
-   Prompt the agent to:
-   - Explore the project structure and identify the domain (game, web app, API, CLI tool, library, etc.)
-   - Find directories/files most relevant to the goal: "$ARGUMENTS"
-   - Recommend 1-3 target directories or files for the improvement loop
-   - Return a JSON-like summary: `{targets: [...], rationale: "..."}`
-
-3. **Ask about configuration** using AskUserQuestion with MULTIPLE questions:
+2. **After the agent returns**, ask about configuration using AskUserQuestion:
 
    Ask these in a SINGLE AskUserQuestion call with multiple questions:
 
@@ -53,26 +55,28 @@ The user provided a goal directly. Auto-discover the right files:
 
 ## If NO arguments provided (empty $ARGUMENTS):
 
-Full interactive mode:
+Full interactive mode. **YOU MUST spawn an agent to analyze the project.**
 
-1. **Discover the project structure**:
-   ```bash
-   ls -d */ 2>/dev/null | head -20
-   ls package.json pyproject.toml Makefile Cargo.toml go.mod 2>/dev/null || true
+1. **REQUIRED: Spawn an agent for comprehensive project analysis FIRST**:
+
+   Use the Task tool with `subagent_type="Explore"` IMMEDIATELY.
+
+   Prompt:
+   ```
+   Analyze this project comprehensively:
+
+   1. Explore the full project structure
+   2. Identify the project domain (game, web app, API, CLI tool, library, etc.)
+   3. Read key files to understand the codebase
+   4. Recommend target directories/files for improvement
+   5. Suggest 2-3 specific, actionable goals based on what you find
+
+   Return a summary: {domain: "...", targets: [...], suggested_goals: [...], rationale: "..."}
    ```
 
-2. **Spawn an agent for comprehensive project analysis**:
-   Use the Task tool with `subagent_type="Explore"` to analyze the entire project.
+   **DO NOT skip this step. DO NOT ask questions before spawning the agent.**
 
-   Prompt the agent to:
-   - Explore the full project structure
-   - Identify the project domain (game, web app, API, CLI tool, library, data pipeline, etc.)
-   - Read key files to understand the codebase
-   - Recommend target directories/files for improvement
-   - Suggest 2-3 specific, actionable goals based on what it finds
-   - Return a summary: `{domain: "...", targets: [...], suggested_goals: [...], rationale: "..."}`
-
-3. **Ask about configuration** using AskUserQuestion with MULTIPLE questions:
+2. **After the agent returns**, ask about configuration using AskUserQuestion:
 
    Ask these in a SINGLE AskUserQuestion call with multiple questions:
 
