@@ -647,7 +647,8 @@ $img
    \`\`\`
 
 4. **WAIT for the agent's response**
-5. **THEN** make ONE improvement based on the agent's guidance
+5. **Output the agent's feedback** so the user can see it
+6. **THEN** make ONE improvement based on the agent's guidance
 
 Do NOT skip the agent step. Do NOT make changes before the agent analyzes."
       else
@@ -673,7 +674,9 @@ Review the current code and provide:
 Write your analysis to: $LOOP_DIR/agent-feedback.txt
 \`\`\`
 
-**WAIT for the agent's response, THEN make ONE improvement based on their guidance.**
+**WAIT for the agent's response.**
+**Output the agent's feedback** so the user can see it.
+**THEN** make ONE improvement based on their guidance.
 
 Do NOT skip the agent step. Do NOT make changes before the agent analyzes."
       fi
@@ -695,7 +698,7 @@ Do NOT skip the agent step. Do NOT make changes before the agent analyzes."
 
    If no specialized agent fits, use \`general-purpose\` with a detailed prompt.
 
-   Include the agent's key insights in your summary. Do NOT skip this step."
+   **Output the agent's feedback** so the user can see it. Do NOT skip this step."
       else
         AGENT_INSTRUCTION="
 6. **REQUIRED: Spawn expert agent** - After making your improvement, spawn \`$FEEDBACK_AGENT\`.
@@ -708,7 +711,7 @@ Do NOT skip the agent step. Do NOT make changes before the agent analyzes."
    - Request specific, actionable feedback for the next iteration
    - Write feedback to: \`$LOOP_DIR/agent-feedback.txt\`
 
-   Include the agent's key insights in your summary. Do NOT skip this step."
+   **Output the agent's feedback** so the user can see it. Do NOT skip this step."
       fi
     fi
   fi
