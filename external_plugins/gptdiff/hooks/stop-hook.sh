@@ -621,7 +621,7 @@ $img
   if [[ -n "$FEEDBACK_AGENT" ]]; then
     # User can pass "auto" to let Claude decide, or a custom description like "security expert"
     if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
-      AGENT_DESCRIPTION="Pick ONE from: ux-expert, game-balance, code-quality, performance, security, accessibility, documentation. Choose based on what the NEXT subgoal should be toward the goal. Assume previous work is done - what aspect needs attention next?"
+      AGENT_DESCRIPTION="Pick the best-matching agent from your available agents for the NEXT subgoal toward the goal. Use the Task tool to spawn the agent directly by name."
     else
       # User provided a custom agent description
       AGENT_DESCRIPTION="$FEEDBACK_AGENT"
