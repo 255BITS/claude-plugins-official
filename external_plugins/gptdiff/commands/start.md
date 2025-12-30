@@ -47,7 +47,8 @@ The user provided a goal directly. **YOU MUST spawn an agent to analyze the proj
    - Options: 3 (quick), 5 (medium), 10 (thorough)
 
    **Question 2: Agent Feedback**
-   - **Auto (Recommended)**: Claude picks an appropriate agent each iteration
+   - List 2-3 of your available agents that seem most relevant to the goal
+   - **Auto**: Claude picks an appropriate agent each iteration
    - **None**: No agent feedback between iterations
 
 4. **Run the setup**:
@@ -100,7 +101,8 @@ Full interactive mode. **YOU MUST spawn an agent to analyze the project.**
    - Options: 3 (quick), 5 (medium), 10 (thorough)
 
    **Question 4: Agent Feedback**
-   - **Auto (Recommended)**: Claude picks an appropriate agent each iteration
+   - List 2-3 of your available agents that seem most relevant to the goal
+   - **Auto**: Claude picks an appropriate agent each iteration
    - **None**: No agent feedback between iterations
 
 4. **Run the setup**:
