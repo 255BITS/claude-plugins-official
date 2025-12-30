@@ -6,6 +6,15 @@ allowed-tools: ["Bash", "Glob", "Read", "AskUserQuestion", "Task"]
 
 # GPTDiff Loop
 
+## First: Discover available agents
+
+Before anything else, get the list of REAL agents available in this session:
+```bash
+python3 /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/hooks/list_agents.py --plugins-dir /home/ntc/dev/claude-plugins-official/plugins --catalog
+```
+
+**IMPORTANT**: Only offer agents from this list. Do NOT invent agent types like "Game Balance Expert" - only use agents that actually exist in the catalog above.
+
 ## If $ARGUMENTS contains `--dir` or `--file` flags:
 
 Run the setup script directly:
@@ -24,21 +33,19 @@ The user provided a goal directly. Auto-discover the right files:
    ls package.json pyproject.toml Makefile Cargo.toml go.mod 2>/dev/null || true
    ```
 
-2. **Spawn expert agent for project analysis**:
-   Use the Task tool with subagent_type="general-purpose" to analyze the project.
+2. **Spawn an agent from /agents for project analysis**:
+   Use the Task tool with an appropriate agent from the catalog (e.g., `code-explorer` or `code-architect`).
 
    Prompt the agent to:
    - Explore the project structure and identify the domain (game, web app, API, CLI tool, library, etc.)
    - Find directories/files most relevant to the goal: "$ARGUMENTS"
    - Recommend 1-3 target directories or files for the improvement loop
-   - Suggest what type of expert feedback would be most valuable (UX, game balance, security, performance, etc.)
-   - Return a JSON-like summary: `{targets: [...], expert_type: "...", rationale: "..."}`
-
-   The agent should auto-determine its role based on what it discovers (e.g., if it finds game code, act as a game design expert; if it finds UI components, act as a UX expert).
+   - From the available agents catalog, suggest which agent would be best for feedback
+   - Return a JSON-like summary: `{targets: [...], recommended_agent: "agent-name-from-catalog", rationale: "..."}`
 
 3. **Use the agent's analysis to inform your questions**:
    - Use the suggested targets as defaults
-   - Use the suggested expert_type for the agent feedback question
+   - Use the recommended_agent for the feedback question
 
 4. **Ask about configuration** using AskUserQuestion with MULTIPLE questions:
 
@@ -49,16 +56,15 @@ The user provided a goal directly. Auto-discover the right files:
    - Options: 3 (quick), 5 (medium), 10 (thorough)
 
    **Question 2: Agent Feedback**
-   - **Auto (Recommended)**: Spawn agents to review changes each iteration (Claude decides what kind based on goal)
+   - List 1-2 agents from the catalog that match the goal best (use their actual names)
+   - **Auto**: Claude picks from available agents each iteration
    - **None**: No agent feedback between iterations
-
-   Note: User can also type a custom agent description like "security expert" or "game designer"
 
 5. **Run the setup**:
    ```
    /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] --goal "THE_GOAL_FROM_ARGUMENTS" --max-iterations N --feedback-agent AGENT
    ```
-   Where AGENT is "auto", a custom description, or omitted for none.
+   Where AGENT is "auto", an agent name from the catalog, or omitted for none.
 
 ## If NO arguments provided (empty $ARGUMENTS):
 
@@ -70,8 +76,8 @@ Full interactive mode:
    ls package.json pyproject.toml Makefile Cargo.toml go.mod 2>/dev/null || true
    ```
 
-2. **Spawn expert agent for comprehensive project analysis**:
-   Use the Task tool with subagent_type="general-purpose" to analyze the entire project.
+2. **Spawn an agent from /agents for comprehensive project analysis**:
+   Use the Task tool with an appropriate agent (e.g., `code-explorer` or `code-architect`).
 
    Prompt the agent to:
    - Explore the full project structure
@@ -79,15 +85,13 @@ Full interactive mode:
    - Read key files to understand the codebase
    - Recommend target directories/files for improvement
    - Suggest 2-3 specific, actionable goals based on what it finds
-   - Suggest what type of expert feedback would be most valuable
-   - Return a summary: `{domain: "...", targets: [...], suggested_goals: [...], expert_type: "...", rationale: "..."}`
-
-   The agent should auto-determine its expert role based on the project type.
+   - From the available agents catalog, suggest which agent would be best for feedback
+   - Return a summary: `{domain: "...", targets: [...], suggested_goals: [...], recommended_agent: "agent-name-from-catalog", rationale: "..."}`
 
 3. **Use the agent's analysis to present informed questions**:
    - Use the suggested targets for the target directories question
    - Use the suggested goals as options
-   - Use the suggested expert_type for the agent feedback question
+   - Use the recommended_agent for the feedback question
 
 4. **Ask about configuration** using AskUserQuestion with MULTIPLE questions:
 
@@ -107,17 +111,15 @@ Full interactive mode:
    - Options: 3 (quick), 5 (medium), 10 (thorough)
 
    **Question 4: Agent Feedback**
-   - Pre-select the agent's suggested expert_type as the recommended option
-   - **Auto**: Let Claude decide what kind of expert based on goal
+   - List 1-2 agents from the catalog that the analysis agent recommended
+   - **Auto**: Claude picks from available agents each iteration
    - **None**: No agent feedback between iterations
-
-   Note: User can also type a custom agent description like "security expert" or "game designer"
 
 5. **Run the setup**:
    ```
    /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N --feedback-agent AGENT
    ```
-   Where AGENT is "auto", a custom description, or omitted for none.
+   Where AGENT is "auto", an agent name from the catalog, or omitted for none.
 
 ---
 
