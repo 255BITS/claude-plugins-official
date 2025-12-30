@@ -1,208 +1,90 @@
-# GPTDiff Plugin — Agent Loops on a Subdirectory
+# GPTDiff Plugin — Agent Loops for Iterative Improvement
 
-This plugin is for **iterating** with GPTDiff — not doing a task once, but doing it *many times* to converge on a better result.
+This plugin runs **iterative improvement loops** using GPTDiff — not doing a task once, but doing it *many times* to converge on a better result.
 
-It's intentionally modeled after the **Ralph Wiggum** example plugin's "loop-in-session" behavior. It makes iterative improvements to a **single focused directory**, using either Claude Code's own inference (default) or an external LLM via gptdiff's API.
+## Commands
 
-## What you get
-
-When you start a loop with `/gptdiff-loop`:
-
-1. The plugin **scaffolds your target directory** (the subdirectory you pass):
-   - Adds a `.gptignore` (so GPTDiff doesn’t slurp assets/build outputs)
-   - Adds an `INTERFACE.md` (an explicit contract for what “good” looks like)
-   - Optionally adds `RUBRIC.md` (for creative domains like game content)
-2. A **Stop hook** runs the agent loop:
-   - Runs optional `--eval-cmd` (signals/metrics/logs)
-   - Runs optional `--cmd` (a hard gate; stops when it passes)
-   - Makes improvements via **Claude Code** (default) or **external LLM** (if `GPTDIFF_LLM_API_KEY` is set)
-   - Repeats until `--max-iterations` is reached (or `--cmd` succeeds)
-
-This pattern is ideal for “make it better” loops (fun/balance/variety/polish) where you want iterative refinement, not a single-shot answer.
+- `/start` — Start an iterative improvement loop
+- `/stop` — Cancel the current loop
+- `/status` — Check loop progress
+- `/help` — Show help and examples
 
 ## Quick start
 
-### 1) Scaffold a game-content directory (no loop yet)
+### Basic loop
 
 ```bash
-/gptdiff-scaffold --dir items --template game-world
+/start --dir src --goal "Improve code quality" --max-iterations 5
 ```
 
-### 2) Run an “improve the items” loop (fixed iteration budget)
+### Multiple targets
 
 ```bash
-/gptdiff-loop --dir items --template game-world \
-  --goal "Iteratively improve item fun + variety. Add or revise 1–3 items per iteration. Keep balance tight and avoid power creep. Follow INTERFACE.md and RUBRIC.md." \
-  --max-iterations 12
+/start --dir src --dir lib --goal "Refactor shared code" --max-iterations 3
 ```
 
-### 3) Run a “balance” loop with an evaluator
-
-If you have an evaluator script (even a simple one) that prints stats, you can feed it in:
+### Specific files
 
 ```bash
-/gptdiff-loop --dir items --template game-world \
-  --goal "Balance item stats across tiers; reduce outliers; keep each item distinct; update docs if needed." \
-  --eval-cmd "python3 tools/eval_items.py" \
-  --max-iterations 10
+/start --file src/main.ts --file src/utils.ts --goal "Optimize these files" --max-iterations 3
 ```
 
-### 4) Run a loop with feedback between iterations
+## Options
 
-Use `--feedback-cmd` to run a command after each iteration. The output feeds into the next iteration's context:
+```
+--dir PATH              Target directory (can specify multiple)
+--file PATH             Target file (can specify multiple)
+--goal TEXT             Goal prompt (required)
+--max-iterations N      Stop after N iterations (default: 3, 0 = unlimited)
+--inference-mode MODE   "claude" (default) or "external" LLM
+--eval-cmd CMD          Optional evaluator command (signals only)
+--feedback-cmd CMD      Run after each iteration, output feeds into next
+--feedback-image PATH   Image file to include in each iteration's context
+--feedback-agent AGENT  Agent to review changes each iteration
+```
+
+## Feedback options
+
+### Test runner feedback
 
 ```bash
-# Test runner feedback
-/start --dir src \
-  --goal "Fix failing tests" \
+/start --dir src --goal "Fix failing tests" \
   --feedback-cmd "npm test 2>&1 | tail -50" \
   --max-iterations 5
 ```
 
-The feedback command receives these environment variables:
-- `GPTDIFF_LOOP_TARGETS`: The target directories/files
-- `GPTDIFF_LOOP_ITERATION`: Current iteration number
-- `GPTDIFF_LOOP_GOAL`: The goal text
-
-### 5) Visual feedback with images
-
-Use `--feedback-image` to include a screenshot or visual output in each iteration. The image is sent to both Claude Code and external LLMs:
+### Visual feedback with images
 
 ```bash
-# Screenshot tool for UI improvements
-/start --dir game/ui \
-  --goal "Improve UI aesthetics and usability" \
+/start --dir game/ui --goal "Improve UI aesthetics" \
   --feedback-cmd "screenshot-tool --output /tmp/ui.png" \
   --feedback-image /tmp/ui.png \
   --max-iterations 5
-
-# Gameplay visual comparator
-/start --dir game/enemies \
-  --goal "Balance enemy difficulty - make visual indicators clearer" \
-  --feedback-cmd "python3 tools/run_simulation.py --screenshot /tmp/sim.png" \
-  --feedback-image /tmp/sim.png \
-  --max-iterations 10
-
-# Just image, no command (image generated elsewhere)
-/start --dir game/sprites \
-  --goal "Improve sprite animations based on preview" \
-  --feedback-image /tmp/game-preview.png \
-  --max-iterations 3
 ```
 
-Supported image formats: PNG, JPEG, GIF, WebP
+### Agent-based feedback
 
-### 6) Claude-driven feedback (let Claude decide)
+Use `--feedback-agent` to have Claude spawn a specialized agent to review changes each iteration.
 
-When no explicit feedback is configured, Claude is prompted to gather feedback itself AND can persist images for the next iteration:
-
-```bash
-/start --dir game/content \
-  --goal "Improve game balance and add variety" \
-  --max-iterations 5
-```
-
-Claude will be instructed to:
-- Take screenshots if working on UI
-- Run simulations if working on game logic
-- Execute test suites to verify correctness
-- **Save feedback images** to `.claude/start/<slug>/feedback-image.png`
-
-The loop **automatically detects** any images saved to the feedback path and includes them in the next iteration. This means Claude can:
-1. Make code changes
-2. Take a screenshot or generate a visualization
-3. Save it to the feedback path
-4. The next iteration sees the image automatically
-
-This works with both Claude Code and external LLMs - no configuration needed!
-
-### 7) Agent-based feedback (expert reviewers)
-
-Use `--feedback-agent` to have Claude spawn a specialized agent to review changes each iteration:
+**IMPORTANT**: Only use agents that exist in your `/agents` directory. Run `/agents` to see available agents.
 
 ```bash
-# Explicit agent type
-/start --dir game/ui --goal "Improve UI aesthetics" \
-  --feedback-agent ux-expert --max-iterations 5
-
-# Auto-detect from goal keywords
-/start --dir game/enemies --goal "Balance enemy difficulty" \
+# Auto-select agent (Claude picks from available agents)
+/start --dir src --goal "Improve code quality" \
   --feedback-agent auto --max-iterations 5
+
+# Specific agent (must exist in /agents)
+/start --dir src --goal "Review error handling" \
+  --feedback-agent code-reviewer --max-iterations 5
 ```
 
-Available agent types:
-- **ux-expert**: Reviews UI/UX for usability, visual hierarchy, user flow
-- **game-balance**: Reviews game mechanics, difficulty curves, stat balance
-- **code-quality**: Reviews maintainability, best practices, potential bugs
-- **performance**: Reviews for bottlenecks, memory usage, algorithmic complexity
-- **security**: Reviews for vulnerabilities, OWASP risks, secure coding
-- **accessibility**: Reviews for WCAG compliance, screen reader support
-
-With `--feedback-agent auto`, the agent type is detected from goal keywords (e.g., "UI" → ux-expert, "balance" → game-balance).
-
-Agent feedback is saved to `.claude/start/<slug>/agent-feedback.txt` and included in subsequent iterations.
-
-## Why subdirectory loops?
-
-In game development you often have a dedicated **content surface area**:
-
-- `items/` (item definitions)
-- `interactions/` (trigger/effect graphs)
-- `encounters/` (spawn tables)
-- `balance/` (curves + tuning)
-
-Each is a perfect place for an agent loop:
-
-- **Items loop:** add novelty, fix boring items, improve clarity
-- **Interactions loop:** add synergies/counters, reduce degenerate combos
-- **Balance loop:** tighten curves, reduce outliers, preserve identity
-- **Polish loop:** improve docs, naming, consistency, schema compliance
-
-Each loop is the same mechanism — just a different goal prompt and (optionally) a different eval command.
-
-## Commands
-
-- `/gptdiff-scaffold` — create `.gptignore` + interface files in a target directory
-- `/gptdiff-loop` — start an iterative improvement loop (Claude Code makes the changes)
-- `/cancel-gptdiff-loop` — stop the current loop (removes state file)
-- `/gptdiff-help` — explanation and examples
-
-## Where the loop stores state/logs
-
-- Loop state: `.claude/gptdiff-loop.local.md`
-- Logs per target dir: `.claude/gptdiff-loop/<target-slug>/`
-  - `eval.log` (optional)
-  - `cmd.log` (optional)
-  - `gptdiff.log`
-  - `diffstat.txt` (what changed)
-  - `changed-files.txt`
-
-## Permissions
-
-This plugin includes a `PreToolUse` hook that auto-approves bash commands for the plugin's own scripts. This means:
-
-- `/gptdiff-loop` and `/gptdiff-scaffold` run without manual permission prompts
-- The hook only approves commands that match the plugin's script paths
-- All other bash commands follow normal Claude Code permission rules
+With `--feedback-agent auto`, Claude picks the most appropriate agent from the catalog each iteration.
 
 ## Inference modes
 
-The plugin supports two inference modes:
-
 ### Claude Code mode (default)
 
-When `GPTDIFF_LLM_API_KEY` is **not set**, the plugin uses Claude Code's own inference:
-
-1. The Stop hook gathers context (files, eval output, goal)
-2. It constructs a prompt asking Claude Code to make improvements
-3. Claude Code reads the files using its Read tool
-4. Claude Code makes changes using its Edit/Write tools
-5. The loop repeats with the next iteration
-
-**Benefits:**
-- No separate API keys needed (uses your Claude Code session)
-- Full context awareness (Claude Code sees the whole conversation)
-- Native tool usage (Edit, Write, Bash) for precise changes
+When `GPTDIFF_LLM_API_KEY` is **not set**, Claude Code makes improvements directly using its Edit/Write tools.
 
 ### External LLM mode
 
@@ -211,22 +93,17 @@ When `GPTDIFF_LLM_API_KEY` **is set**, the plugin uses gptdiff's Python API to c
 ```bash
 export GPTDIFF_LLM_API_KEY="your-api-key"
 export GPTDIFF_MODEL="deepseek-reasoner"  # optional
-export GPTDIFF_LLM_BASE_URL="https://api.anthropic.com"  # optional, for Claude API
 ```
 
-**Benefits:**
-- Use cheaper/faster models for iterations
-- Offload inference to external provider
-- Supports any OpenAI-compatible API (including Anthropic, nano-gpt, etc.)
+## Where state and logs are stored
 
-Both modes use gptdiff's `.gptignore` patterns for file discovery.
+- Loop state: `.claude/start.local.md`
+- Logs: `.claude/start/<target-slug>/`
+  - `eval.log`, `feedback.log`, `gptdiff.log`
+  - `diffstat.txt`, `changed-files.txt`
 
 ## Notes
 
-- This loop is designed to be **reviewable**:
-  - run it on a branch
-  - use `git diff` / `git add -p`
-  - keep iteration budgets small
-- It's also designed to be **domain-flexible**:
-  - the "interface" is a file you own and evolve (`INTERFACE.md`)
-  - nothing is hardcoded to a specific engine or game
+- Run loops on a branch for easy review with `git diff`
+- Keep iteration budgets small and reviewable
+- Uses gptdiff's `.gptignore` patterns for file discovery

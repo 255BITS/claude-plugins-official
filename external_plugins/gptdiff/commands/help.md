@@ -20,7 +20,7 @@ Start the loop. Run without arguments for **interactive setup** that asks about:
 - Target directories/files
 - Goal (with smart suggestions based on code analysis)
 - Number of iterations (3/5/10)
-- Agent mode (auto, ux-expert, game-balance, code-quality, or none)
+- Agent feedback (auto, specific agent from /agents, or none)
 
 **Options:**
 - `--dir PATH` - Target directory (can specify multiple)
@@ -47,13 +47,13 @@ Start the loop. Run without arguments for **interactive setup** that asks about:
   --feedback-cmd "screenshot-tool /tmp/ui.png" \
   --feedback-image /tmp/ui.png --max-iterations 5
 
-# Expert agent feedback (Claude decides what expert to spawn)
-/start --dir game/enemies --goal "Balance difficulty" \
+# Agent feedback (Claude picks from /agents each iteration)
+/start --dir src --goal "Improve code quality" \
   --feedback-agent auto --max-iterations 5
 
-# Custom agent description
-/start --dir src/auth --goal "Harden authentication" \
-  --feedback-agent "security expert" --max-iterations 3
+# Specific agent from /agents
+/start --dir src --goal "Review error handling" \
+  --feedback-agent code-reviewer --max-iterations 3
 ```
 
 ### /status
@@ -90,16 +90,18 @@ This lets Claude decide what feedback to gather without pre-configuring commands
 
 ## Expert Agent Feedback
 
-Use `--feedback-agent` to have Claude spawn a specialized agent each iteration:
+Use `--feedback-agent` to spawn a specialized agent to review changes each iteration.
 
-- **auto**: Claude decides what kind of expert review is most valuable based on the goal
-- **custom**: Pass any description like "security expert", "game designer", "UX reviewer"
+**IMPORTANT**: Only use agents that exist in your `/agents` directory. Run `/agents` to see available agents.
+
+- **auto**: Claude picks the best agent from your /agents catalog each iteration
+- **specific**: Pass the name of an agent from /agents (e.g., `code-reviewer`, `code-architect`)
 
 Examples:
 ```
 --feedback-agent auto
---feedback-agent "security expert focusing on auth"
---feedback-agent "game balance reviewer"
+--feedback-agent code-reviewer
+--feedback-agent silent-failure-hunter
 ```
 
 ## Logs
