@@ -621,7 +621,7 @@ $img
   if [[ -n "$FEEDBACK_AGENT" ]]; then
     # User can pass "auto" to let Claude decide, or a custom description like "security expert"
     if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
-      AGENT_DESCRIPTION="Based on the goal, decide what kind of expert review would be most valuable (e.g., UX review for UI work, balance review for game mechanics, security review for auth code, etc.)"
+      AGENT_DESCRIPTION="Choose the expert type based on what YOU changed THIS iteration (not the overall goal). Examples: documentation expert for docs/README changes, UX expert for CSS/styling, security expert for auth code, performance expert for algorithm changes, API design expert for endpoint changes. Match the expert to your specific changes."
     else
       # User provided a custom agent description
       AGENT_DESCRIPTION="$FEEDBACK_AGENT"
