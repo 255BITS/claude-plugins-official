@@ -616,48 +616,40 @@ $img
 
   # Build agent feedback instruction if feedback_agent is set
   AGENT_INSTRUCTION=""
+  AGENTS_CATALOG=""
 
   # If feedback_agent is "auto" or any custom value, enable agent feedback
   if [[ -n "$FEEDBACK_AGENT" ]]; then
-    # Discover available agents from plugins
-    # Path from hooks -> gptdiff -> external_plugins -> claude-plugins-official -> plugins
-    PLUGINS_DIR="${CLAUDE_PLUGINS_DIR:-$(dirname "$PLUGIN_HOOKS_DIR")/../../plugins}"
-    AGENTS_CATALOG=""
-
-    if [[ -d "$PLUGINS_DIR" ]]; then
-      # Get human-readable catalog of agent names and descriptions
-      AGENTS_CATALOG="$(python3 "$PLUGIN_HOOKS_DIR/list_agents.py" --plugins-dir "$PLUGINS_DIR" --catalog 2>/dev/null || true)"
-    fi
-
-    if [[ "$FEEDBACK_AGENT" == "auto" ]] && [[ -n "$AGENTS_CATALOG" ]]; then
-      # Auto mode: use agents already registered in Claude Code session
+    if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
+      # Auto mode: Claude picks from its available agents
       AGENT_INSTRUCTION="
 6. **REQUIRED: Spawn expert agent** - You MUST spawn a feedback agent this iteration.
 
-   **Available agents (from /agents):**
-$AGENTS_CATALOG
-
    **How to invoke:**
-   1. Pick the agent best suited for the NEXT subgoal toward the goal
-   2. Use the Task tool with that agent's name as \`subagent_type\`
-   3. The agent's full prompt is already loaded - just provide context:
+   1. Check your available agents (the ones you can use with the Task tool)
+   2. Pick the agent best suited for the NEXT subgoal toward the goal
+   3. Use the Task tool with that agent's name as \`subagent_type\`
+   4. In your prompt, provide context:
       - Files to review: \`$TARGETS_DISPLAY\`
       - Overall goal: $GOAL
       - Request specific, actionable feedback for the next iteration
       - Write feedback to: \`$LOOP_DIR/agent-feedback.txt\`
 
-   Include the agent's key insights in your summary. Do NOT skip this step."
-    elif [[ -n "$FEEDBACK_AGENT" ]]; then
-      # User specified a custom agent name or description
-      AGENT_INSTRUCTION="
-6. **REQUIRED: Spawn expert agent** - You MUST spawn a feedback agent this iteration:
-   Agent: $FEEDBACK_AGENT
+   If no specialized agent fits, use \`general-purpose\` with a detailed prompt describing the expertise needed.
 
-   Prompt the agent to:
-   - Review the code in: $TARGETS_DISPLAY
-   - Consider the goal: $GOAL
-   - Provide specific, actionable feedback
-   - Save feedback to: $LOOP_DIR/agent-feedback.txt
+   Include the agent's key insights in your summary. Do NOT skip this step."
+    else
+      # User specified a specific agent name
+      AGENT_INSTRUCTION="
+6. **REQUIRED: Spawn expert agent** - You MUST spawn a feedback agent this iteration.
+
+   Use the Task tool with \`subagent_type: \"$FEEDBACK_AGENT\"\`
+
+   In your prompt, provide:
+   - Files to review: \`$TARGETS_DISPLAY\`
+   - Overall goal: $GOAL
+   - Request specific, actionable feedback for the next iteration
+   - Write feedback to: \`$LOOP_DIR/agent-feedback.txt\`
 
    Include the agent's key insights in your summary. Do NOT skip this step."
     fi

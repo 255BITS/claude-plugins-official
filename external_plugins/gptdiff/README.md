@@ -64,21 +64,15 @@ This plugin runs **iterative improvement loops** using GPTDiff — not doing a t
 
 ### Agent-based feedback
 
-Use `--feedback-agent` to have Claude spawn a specialized agent to review changes each iteration.
-
-**IMPORTANT**: Only use agents that exist in your `/agents` directory. Run `/agents` to see available agents.
+Use `--feedback-agent` to have Claude spawn an agent to review changes each iteration.
 
 ```bash
-# Auto-select agent (Claude picks from available agents)
+# Claude picks an appropriate agent each iteration
 /start --dir src --goal "Improve code quality" \
   --feedback-agent auto --max-iterations 5
-
-# Specific agent (must exist in /agents)
-/start --dir src --goal "Review error handling" \
-  --feedback-agent code-reviewer --max-iterations 5
 ```
 
-With `--feedback-agent auto`, Claude picks the most appropriate agent from the catalog each iteration.
+With `--feedback-agent auto`, Claude picks an appropriate agent from its available agents each iteration.
 
 ## Inference modes
 

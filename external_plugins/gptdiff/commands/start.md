@@ -6,15 +6,6 @@ allowed-tools: ["Bash", "Glob", "Read", "AskUserQuestion", "Task"]
 
 # GPTDiff Loop
 
-## First: Discover available agents
-
-Before anything else, get the list of REAL agents available in this session:
-```bash
-python3 /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/hooks/list_agents.py --plugins-dir /home/ntc/dev/claude-plugins-official/plugins --catalog
-```
-
-**IMPORTANT**: Only offer agents from this list. Do NOT invent agent types like "Game Balance Expert" - only use agents that actually exist in the catalog above.
-
 ## If $ARGUMENTS contains `--dir` or `--file` flags:
 
 Run the setup script directly:
@@ -33,21 +24,16 @@ The user provided a goal directly. Auto-discover the right files:
    ls package.json pyproject.toml Makefile Cargo.toml go.mod 2>/dev/null || true
    ```
 
-2. **Spawn an agent from /agents for project analysis**:
-   Use the Task tool with an appropriate agent from the catalog (e.g., `code-explorer` or `code-architect`).
+2. **Spawn an agent for project analysis**:
+   Use the Task tool with `subagent_type="Explore"` to analyze the project.
 
    Prompt the agent to:
    - Explore the project structure and identify the domain (game, web app, API, CLI tool, library, etc.)
    - Find directories/files most relevant to the goal: "$ARGUMENTS"
    - Recommend 1-3 target directories or files for the improvement loop
-   - From the available agents catalog, suggest which agent would be best for feedback
-   - Return a JSON-like summary: `{targets: [...], recommended_agent: "agent-name-from-catalog", rationale: "..."}`
+   - Return a JSON-like summary: `{targets: [...], rationale: "..."}`
 
-3. **Use the agent's analysis to inform your questions**:
-   - Use the suggested targets as defaults
-   - Use the recommended_agent for the feedback question
-
-4. **Ask about configuration** using AskUserQuestion with MULTIPLE questions:
+3. **Ask about configuration** using AskUserQuestion with MULTIPLE questions:
 
    Ask these in a SINGLE AskUserQuestion call with multiple questions:
 
@@ -56,15 +42,14 @@ The user provided a goal directly. Auto-discover the right files:
    - Options: 3 (quick), 5 (medium), 10 (thorough)
 
    **Question 2: Agent Feedback**
-   - List 1-2 agents from the catalog that match the goal best (use their actual names)
-   - **Auto**: Claude picks from available agents each iteration
+   - **Auto (Recommended)**: Claude picks an appropriate agent each iteration
    - **None**: No agent feedback between iterations
 
-5. **Run the setup**:
+4. **Run the setup**:
    ```
    /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] --goal "THE_GOAL_FROM_ARGUMENTS" --max-iterations N --feedback-agent AGENT
    ```
-   Where AGENT is "auto", an agent name from the catalog, or omitted for none.
+   Where AGENT is "auto" or omitted for none.
 
 ## If NO arguments provided (empty $ARGUMENTS):
 
@@ -76,8 +61,8 @@ Full interactive mode:
    ls package.json pyproject.toml Makefile Cargo.toml go.mod 2>/dev/null || true
    ```
 
-2. **Spawn an agent from /agents for comprehensive project analysis**:
-   Use the Task tool with an appropriate agent (e.g., `code-explorer` or `code-architect`).
+2. **Spawn an agent for comprehensive project analysis**:
+   Use the Task tool with `subagent_type="Explore"` to analyze the entire project.
 
    Prompt the agent to:
    - Explore the full project structure
@@ -85,15 +70,9 @@ Full interactive mode:
    - Read key files to understand the codebase
    - Recommend target directories/files for improvement
    - Suggest 2-3 specific, actionable goals based on what it finds
-   - From the available agents catalog, suggest which agent would be best for feedback
-   - Return a summary: `{domain: "...", targets: [...], suggested_goals: [...], recommended_agent: "agent-name-from-catalog", rationale: "..."}`
+   - Return a summary: `{domain: "...", targets: [...], suggested_goals: [...], rationale: "..."}`
 
-3. **Use the agent's analysis to present informed questions**:
-   - Use the suggested targets for the target directories question
-   - Use the suggested goals as options
-   - Use the recommended_agent for the feedback question
-
-4. **Ask about configuration** using AskUserQuestion with MULTIPLE questions:
+3. **Ask about configuration** using AskUserQuestion with MULTIPLE questions:
 
    Ask these in a SINGLE AskUserQuestion call with multiple questions:
 
@@ -111,15 +90,14 @@ Full interactive mode:
    - Options: 3 (quick), 5 (medium), 10 (thorough)
 
    **Question 4: Agent Feedback**
-   - List 1-2 agents from the catalog that the analysis agent recommended
-   - **Auto**: Claude picks from available agents each iteration
+   - **Auto (Recommended)**: Claude picks an appropriate agent each iteration
    - **None**: No agent feedback between iterations
 
-5. **Run the setup**:
+4. **Run the setup**:
    ```
    /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N --feedback-agent AGENT
    ```
-   Where AGENT is "auto", an agent name from the catalog, or omitted for none.
+   Where AGENT is "auto" or omitted for none.
 
 ---
 

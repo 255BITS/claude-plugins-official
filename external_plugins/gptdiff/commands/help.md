@@ -47,13 +47,9 @@ Start the loop. Run without arguments for **interactive setup** that asks about:
   --feedback-cmd "screenshot-tool /tmp/ui.png" \
   --feedback-image /tmp/ui.png --max-iterations 5
 
-# Agent feedback (Claude picks from /agents each iteration)
+# Agent feedback (Claude picks an appropriate agent each iteration)
 /start --dir src --goal "Improve code quality" \
   --feedback-agent auto --max-iterations 5
-
-# Specific agent from /agents
-/start --dir src --goal "Review error handling" \
-  --feedback-agent code-reviewer --max-iterations 3
 ```
 
 ### /status
@@ -90,18 +86,13 @@ This lets Claude decide what feedback to gather without pre-configuring commands
 
 ## Expert Agent Feedback
 
-Use `--feedback-agent` to spawn a specialized agent to review changes each iteration.
+Use `--feedback-agent` to spawn an agent to review changes each iteration.
 
-**IMPORTANT**: Only use agents that exist in your `/agents` directory. Run `/agents` to see available agents.
-
-- **auto**: Claude picks the best agent from your /agents catalog each iteration
-- **specific**: Pass the name of an agent from /agents (e.g., `code-reviewer`, `code-architect`)
+- **auto**: Claude picks an appropriate agent each iteration based on the goal and changes made
 
 Examples:
 ```
 --feedback-agent auto
---feedback-agent code-reviewer
---feedback-agent silent-failure-hunter
 ```
 
 ## Logs
