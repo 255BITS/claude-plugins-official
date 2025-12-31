@@ -97,7 +97,9 @@ Examples:
 
 ## Logs
 
-- State: `.claude/start.local.md`
+Each loop has its own directory (multiple loops can run concurrently):
+
+- State: `.claude/start/<target-slug>/state.local.md`
 - Logs: `.claude/start/<target-slug>/`
   - `eval.log` - Evaluator output
   - `feedback.log` - Feedback command output

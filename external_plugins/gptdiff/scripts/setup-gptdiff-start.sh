@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # GPTDiff Loop Setup Script
-# Writes .claude/start.local.md (state consumed by stop hook)
+# Writes .claude/start/{slug}/state.local.md (state consumed by stop hook)
+# Each loop has its own state file based on target hash, allowing multiple concurrent loops
 
 set -euo pipefail
 
@@ -170,6 +171,19 @@ done
 
 mkdir -p .claude
 
+# Compute loop slug FIRST (same algorithm as stop-hook.sh)
+# This allows each loop to have its own state file
+ALL_TARGETS_FOR_SLUG=""
+for dir in "${TARGET_DIRS[@]}"; do
+  ALL_TARGETS_FOR_SLUG+="$dir"$'\n'
+done
+for file in "${TARGET_FILES[@]}"; do
+  ALL_TARGETS_FOR_SLUG+="$file"$'\n'
+done
+LOOP_SLUG="$(echo "$ALL_TARGETS_FOR_SLUG" | md5sum | cut -c1-12)"
+LOOP_DIR=".claude/start/$LOOP_SLUG"
+mkdir -p "$LOOP_DIR"
+
 yaml_escape() {
   local s="$1"
   s="${s//\\/\\\\}"
@@ -271,7 +285,7 @@ TARGET_FILES_YAML="$(build_yaml_array "${TARGET_FILES[@]}")"
   echo " "
   echo "Please reply with a short progress note (or just \`ok\`) and then stop."
   echo "To cancel: /stop"
-} > .claude/start.local.md
+} > "$LOOP_DIR/state.local.md"
 
 cat <<EOF
 
@@ -324,16 +338,8 @@ if [[ "$MODEL_YAML" != "null" ]]; then
   echo "🤖 Model:       $MODEL"
 fi
 
-# Compute the log directory slug (same as stop-hook.sh)
-ALL_TARGETS=""
-for dir in "${TARGET_DIRS[@]}"; do
-  ALL_TARGETS+="$dir"$'\n'
-done
-for file in "${TARGET_FILES[@]}"; do
-  ALL_TARGETS+="$file"$'\n'
-done
-LOG_SLUG="$(echo "$ALL_TARGETS" | md5sum | cut -c1-12)"
-echo "📝 Logs:        .claude/start/$LOG_SLUG/"
+# Use the already-computed slug
+echo "📝 Logs:        $LOOP_DIR/"
 
 cat <<EOF
 

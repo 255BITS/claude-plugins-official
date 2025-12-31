@@ -8,7 +8,9 @@
 #   - makes improvements via LLM (external or Claude Code)
 #
 # The loop is activated by /start which creates:
-#   .claude/start.local.md
+#   .claude/start/{slug}/state.local.md
+#
+# Multiple loops can run concurrently (each with different targets)
 #
 # Inference mode:
 #   - If GPTDIFF_LLM_API_KEY is set: uses external LLM via gptdiff Python API
@@ -20,11 +22,33 @@ set -euo pipefail
 _HOOK_INPUT="$(cat || true)"
 
 ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-STATE_FILE="$ROOT_DIR/.claude/start.local.md"
 
-if [[ ! -f "$STATE_FILE" ]]; then
-  # No active loop - allow normal stop
+# Find all active loop state files
+# Each loop has its own state file: .claude/start/{slug}/state.local.md
+LOOP_STATE_DIR="$ROOT_DIR/.claude/start"
+STATE_FILES=()
+if [[ -d "$LOOP_STATE_DIR" ]]; then
+  while IFS= read -r -d '' state_file; do
+    STATE_FILES+=("$state_file")
+  done < <(find "$LOOP_STATE_DIR" -name "state.local.md" -print0 2>/dev/null)
+fi
+
+if [[ ${#STATE_FILES[@]} -eq 0 ]]; then
+  # No active loops - allow normal stop
   exit 0
+fi
+
+# For now, process the first active loop found
+# TODO: Could combine multiple loops into a single prompt
+STATE_FILE="${STATE_FILES[0]}"
+
+# If multiple loops are active, warn the user
+if [[ ${#STATE_FILES[@]} -gt 1 ]]; then
+  echo "⚠️  Multiple GPTDiff loops active (${#STATE_FILES[@]} loops). Processing first one." >&2
+  echo "   Active loops:" >&2
+  for sf in "${STATE_FILES[@]}"; do
+    echo "   - $(dirname "$sf" | xargs basename)" >&2
+  done
 fi
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -181,8 +205,10 @@ while IFS= read -r file; do
 done <<< "$TARGET_FILES_STR"
 TARGETS_DISPLAY="${TARGETS_DISPLAY% }"  # Trim trailing space
 
-# Create a slug for the loop directory (hash of all targets)
-TARGET_SLUG="$(echo "$TARGET_DIRS_STR$TARGET_FILES_STR" | md5sum | cut -c1-12)"
+# Loop directory is the parent of the state file
+# (state file is at .claude/start/{slug}/state.local.md)
+LOOP_DIR="$(dirname "$STATE_FILE")"
+TARGET_SLUG="$(basename "$LOOP_DIR")"
 
 # Stop if max iterations exceeded (0 = unlimited)
 if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -gt $MAX_ITERATIONS ]]; then
@@ -197,8 +223,7 @@ if [[ -z "$BASE_PROMPT" ]]; then
   BASE_PROMPT="Continue the GPTDiff loop. Reply with a short progress note, then stop."
 fi
 
-# Logs are kept per target set (TARGET_SLUG was already computed above)
-LOOP_DIR="$ROOT_DIR/.claude/start/$TARGET_SLUG"
+# LOOP_DIR was already set above from the state file's parent directory
 mkdir -p "$LOOP_DIR"
 
 EVAL_LOG="$LOOP_DIR/eval.log"
@@ -251,10 +276,11 @@ if [[ -f "$FEEDBACK_LOG" ]]; then
 fi
 
 # Get agent feedback from PREVIOUS iteration (if any)
+# Include ALL agent feedback - it's valuable context even if long
 AGENT_FEEDBACK_FILE="$LOOP_DIR/agent-feedback.txt"
-AGENT_FEEDBACK_TAIL=""
+AGENT_FEEDBACK_CONTENT=""
 if [[ -f "$AGENT_FEEDBACK_FILE" ]]; then
-  AGENT_FEEDBACK_TAIL="$(tail -n 100 "$AGENT_FEEDBACK_FILE" | sed 's/\r$//')"
+  AGENT_FEEDBACK_CONTENT="$(cat "$AGENT_FEEDBACK_FILE" | sed 's/\r$//')"
 fi
 
 # Get list of files in target directories/files (using gptdiff's .gptignore-aware loader)
@@ -558,11 +584,11 @@ $FEEDBACK_TAIL
 "
   fi
 
-  # Add agent feedback if present
-  if [[ -n "$AGENT_FEEDBACK_TAIL" ]]; then
+  # Add agent feedback if present (include ALL of it - valuable context)
+  if [[ -n "$AGENT_FEEDBACK_CONTENT" ]]; then
     FEEDBACK_SECTION+="### 🧑‍💼 Expert Agent Feedback (from previous iteration)
 \`\`\`
-$AGENT_FEEDBACK_TAIL
+$AGENT_FEEDBACK_CONTENT
 \`\`\`
 
 "

@@ -91,7 +91,9 @@ export GPTDIFF_MODEL="deepseek-reasoner"  # optional
 
 ## Where state and logs are stored
 
-- Loop state: `.claude/start.local.md`
+Each loop has its own directory based on target hash, allowing multiple concurrent loops:
+
+- Loop state: `.claude/start/<target-slug>/state.local.md`
 - Logs: `.claude/start/<target-slug>/`
   - `eval.log`, `feedback.log`, `gptdiff.log`
   - `diffstat.txt`, `changed-files.txt`

@@ -5,16 +5,32 @@ allowed-tools: ["Bash", "Read"]
 
 # Cancel GPTDiff Loop
 
-Check if a loop is active by reading the state file:
+Check if any loops are active and cancel them:
 
-1. First, check if loop state exists (use git root):
+1. **Find all active loops**:
    ```
-   ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && cat "$ROOT/.claude/gptdiff-loop.local.md" 2>/dev/null || echo "NO_LOOP_FOUND"
+   ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+   STATE_FILES=$(find "$ROOT/.claude/start" -name "state.local.md" 2>/dev/null)
+   if [[ -z "$STATE_FILES" ]]; then
+     echo "NO_ACTIVE_LOOPS"
+   else
+     echo "FOUND_LOOPS:"
+     echo "$STATE_FILES" | while read -r sf; do
+       SLUG=$(dirname "$sf" | xargs basename)
+       GOAL=$(sed -n 's/^goal: "\(.*\)"$/\1/p' "$sf" | head -1)
+       ITER=$(sed -n 's/^iteration: //p' "$sf" | head -1)
+       echo "  - $SLUG: iteration $ITER, goal: ${GOAL:0:50}..."
+     done
+   fi
    ```
 
-2. **If NO_LOOP_FOUND**: Say "No active GPTDiff loop found."
+2. **If NO_ACTIVE_LOOPS**: Say "No active GPTDiff loops found."
 
-3. **If file exists**:
-   - Note the iteration and target_dir from the frontmatter
-   - Delete the state file: `ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && rm "$ROOT/.claude/gptdiff-loop.local.md"`
-   - Report: "Cancelled GPTDiff loop (was at iteration N for TARGET_DIR)."
+3. **If loops found**, delete all state files:
+   ```
+   ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+   find "$ROOT/.claude/start" -name "state.local.md" -delete 2>/dev/null
+   echo "All GPTDiff loops cancelled."
+   ```
+
+4. **Report**: List which loops were cancelled (slug + iteration + goal snippet).
