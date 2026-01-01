@@ -284,9 +284,6 @@ AGENT_FEEDBACK_FILE="$LOOP_DIR/agent-feedback.txt"
 AGENT_FEEDBACK_CONTENT=""
 if [[ $ITERATION -gt 1 ]] && [[ -f "$AGENT_FEEDBACK_FILE" ]]; then
   AGENT_FEEDBACK_CONTENT="$(cat "$AGENT_FEEDBACK_FILE" | sed 's/\r$//')"
-elif [[ $ITERATION -eq 1 ]] && [[ -f "$AGENT_FEEDBACK_FILE" ]]; then
-  # Clear stale feedback from previous loop so subagents don't read it
-  rm -f "$AGENT_FEEDBACK_FILE"
 fi
 
 # Get list of files in target directories/files (using gptdiff's .gptignore-aware loader)
@@ -675,6 +672,9 @@ $img
    3. Specific first improvement to make
    4. What to watch out for
 
+   IMPORTANT: Do NOT read any existing agent-feedback.txt - it may contain
+   stale content from a previous loop. Start fresh and overwrite the file.
+
    Write your analysis to: $LOOP_DIR/agent-feedback.txt
    \`\`\`
 
@@ -702,6 +702,9 @@ Review the current code and provide:
 2. Priority areas to improve
 3. Specific first improvement to make
 4. What to watch out for
+
+IMPORTANT: Do NOT read any existing agent-feedback.txt - it may contain
+stale content from a previous loop. Start fresh and overwrite the file.
 
 Write your analysis to: $LOOP_DIR/agent-feedback.txt
 \`\`\`
