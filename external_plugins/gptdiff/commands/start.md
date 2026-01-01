@@ -10,7 +10,7 @@ allowed-tools: ["Bash", "Glob", "Read", "AskUserQuestion", "Task"]
 
 Run the setup script directly:
 ```
-/home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh $ARGUMENTS
+~/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh $ARGUMENTS
 ```
 
 ## If $ARGUMENTS is a plain goal (no flags) like "make the game better":
@@ -53,7 +53,7 @@ The user provided a goal directly. **YOU MUST spawn an agent to analyze the proj
 
 4. **Run the setup**:
    ```
-   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] --goal "THE_GOAL_FROM_ARGUMENTS" --max-iterations N --feedback-agent AGENT
+   ~/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] --goal "THE_GOAL_FROM_ARGUMENTS" --max-iterations N --feedback-agent AGENT
    ```
    Where AGENT is "auto" or omitted for none.
 
@@ -107,7 +107,7 @@ Full interactive mode. **YOU MUST spawn an agent to analyze the project.**
 
 4. **Run the setup**:
    ```
-   /home/ntc/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N --feedback-agent AGENT
+   ~/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N --feedback-agent AGENT
    ```
    Where AGENT is "auto" or omitted for none.
 

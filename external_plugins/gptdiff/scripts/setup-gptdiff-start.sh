@@ -154,32 +154,40 @@ if ! python3 -c "import gptdiff" 2>/dev/null; then
 fi
 
 # Validate directories exist
-for dir in "${TARGET_DIRS[@]}"; do
-  if [[ ! -d "$dir" ]]; then
-    echo "❌ Error: Directory does not exist: $dir" >&2
-    exit 1
-  fi
-done
+if [[ ${#TARGET_DIRS[@]} -gt 0 ]]; then
+  for dir in "${TARGET_DIRS[@]}"; do
+    if [[ ! -d "$dir" ]]; then
+      echo "❌ Error: Directory does not exist: $dir" >&2
+      exit 1
+    fi
+  done
+fi
 
 # Validate files exist
-for file in "${TARGET_FILES[@]}"; do
-  if [[ ! -f "$file" ]]; then
-    echo "❌ Error: File does not exist: $file" >&2
-    exit 1
-  fi
-done
+if [[ ${#TARGET_FILES[@]} -gt 0 ]]; then
+  for file in "${TARGET_FILES[@]}"; do
+    if [[ ! -f "$file" ]]; then
+      echo "❌ Error: File does not exist: $file" >&2
+      exit 1
+    fi
+  done
+fi
 
 mkdir -p .claude
 
 # Compute loop slug FIRST (same algorithm as stop-hook.sh)
 # This allows each loop to have its own state file
 ALL_TARGETS_FOR_SLUG=""
-for dir in "${TARGET_DIRS[@]}"; do
-  ALL_TARGETS_FOR_SLUG+="$dir"$'\n'
-done
-for file in "${TARGET_FILES[@]}"; do
-  ALL_TARGETS_FOR_SLUG+="$file"$'\n'
-done
+if [[ ${#TARGET_DIRS[@]} -gt 0 ]]; then
+  for dir in "${TARGET_DIRS[@]}"; do
+    ALL_TARGETS_FOR_SLUG+="$dir"$'\n'
+  done
+fi
+if [[ ${#TARGET_FILES[@]} -gt 0 ]]; then
+  for file in "${TARGET_FILES[@]}"; do
+    ALL_TARGETS_FOR_SLUG+="$file"$'\n'
+  done
+fi
 LOOP_SLUG="$(echo "$ALL_TARGETS_FOR_SLUG" | md5sum | cut -c1-12)"
 LOOP_DIR=".claude/start/$LOOP_SLUG"
 mkdir -p "$LOOP_DIR"
@@ -244,8 +252,16 @@ build_yaml_array() {
   fi
 }
 
-TARGET_DIRS_YAML="$(build_yaml_array "${TARGET_DIRS[@]}")"
-TARGET_FILES_YAML="$(build_yaml_array "${TARGET_FILES[@]}")"
+if [[ ${#TARGET_DIRS[@]} -gt 0 ]]; then
+  TARGET_DIRS_YAML="$(build_yaml_array "${TARGET_DIRS[@]}")"
+else
+  TARGET_DIRS_YAML="[]"
+fi
+if [[ ${#TARGET_FILES[@]} -gt 0 ]]; then
+  TARGET_FILES_YAML="$(build_yaml_array "${TARGET_FILES[@]}")"
+else
+  TARGET_FILES_YAML="[]"
+fi
 
 # Create state file
 {
