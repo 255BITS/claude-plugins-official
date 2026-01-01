@@ -270,16 +270,19 @@ fi
 
 # Get feedback from PREVIOUS iteration (if any)
 # Feedback runs AFTER changes are made, so this is from the last iteration
+# NOTE: Only read on iteration 2+, since iteration 1 has no previous iteration
 FEEDBACK_TAIL=""
-if [[ -f "$FEEDBACK_LOG" ]]; then
+if [[ $ITERATION -gt 1 ]] && [[ -f "$FEEDBACK_LOG" ]]; then
   FEEDBACK_TAIL="$(tail -n 100 "$FEEDBACK_LOG" | sed 's/\r$//')"
 fi
 
 # Get agent feedback from PREVIOUS iteration (if any)
 # Include ALL agent feedback - it's valuable context even if long
+# NOTE: Only read on iteration 2+, since iteration 1 has no previous iteration
+# (avoids reading stale feedback from a previous loop with the same targets)
 AGENT_FEEDBACK_FILE="$LOOP_DIR/agent-feedback.txt"
 AGENT_FEEDBACK_CONTENT=""
-if [[ -f "$AGENT_FEEDBACK_FILE" ]]; then
+if [[ $ITERATION -gt 1 ]] && [[ -f "$AGENT_FEEDBACK_FILE" ]]; then
   AGENT_FEEDBACK_CONTENT="$(cat "$AGENT_FEEDBACK_FILE" | sed 's/\r$//')"
 fi
 
