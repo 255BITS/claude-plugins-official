@@ -47,6 +47,25 @@ fi
 GIT_ROOT_HASH="$(echo "$ROOT_DIR" | md5sum | cut -c1-12)"
 SESSION_FILE="/tmp/claude-gptdiff-session-$GIT_ROOT_HASH"
 
+# Debug logging
+DEBUG_LOG="$ROOT_DIR/.claude/gptdiff-debug.log"
+mkdir -p "$(dirname "$DEBUG_LOG")"
+{
+  echo "=== Stop hook invoked: $(date) ==="
+  echo "ROOT_DIR: $ROOT_DIR"
+  echo "GIT_ROOT_HASH: $GIT_ROOT_HASH"
+  echo "SESSION_FILE: $SESSION_FILE"
+  echo "SESSION_FILE exists: $(test -f "$SESSION_FILE" && echo yes || echo no)"
+  if [[ -f "$SESSION_FILE" ]]; then
+    echo "SESSION_FILE content: $(cat "$SESSION_FILE")"
+  fi
+  echo "STATE_FILES found: ${#STATE_FILES[@]}"
+  for sf in "${STATE_FILES[@]}"; do
+    echo "  - $sf"
+    echo "    .lock-owner: $(cat "$(dirname "$sf")/.lock-owner" 2>/dev/null || echo 'NONE')"
+  done
+} >> "$DEBUG_LOG"
+
 if [[ -f "$SESSION_FILE" ]]; then
   OUR_SESSION_ID="$(cat "$SESSION_FILE")"
 else
@@ -54,6 +73,8 @@ else
   # Generate a temporary ID (won't match any existing loops)
   OUR_SESSION_ID="no-session-$(date +%s)-$$"
 fi
+
+echo "OUR_SESSION_ID: $OUR_SESSION_ID" >> "$DEBUG_LOG"
 
 # Stale lock timeout: 10 minutes (600 seconds)
 # If a lock hasn't been updated in this time, consider it abandoned
@@ -63,19 +84,29 @@ find_claimable_loop() {
   local now
   now=$(date +%s)
 
+  echo "=== find_claimable_loop called ===" >> "$DEBUG_LOG"
+
   for state_file in "${STATE_FILES[@]}"; do
     local loop_dir
     loop_dir="$(dirname "$state_file")"
     local lock_owner_file="$loop_dir/.lock-owner"
     local last_activity_file="$loop_dir/.last-activity"
 
+    echo "Checking loop: $loop_dir" >> "$DEBUG_LOG"
+    echo "  lock_owner_file exists: $(test -f "$lock_owner_file" && echo yes || echo no)" >> "$DEBUG_LOG"
+
     # Check if there's an existing lock owner
     if [[ -f "$lock_owner_file" ]]; then
       local lock_owner
       lock_owner="$(cat "$lock_owner_file" 2>/dev/null || echo "")"
 
+      echo "  lock_owner content: '$lock_owner'" >> "$DEBUG_LOG"
+      echo "  OUR_SESSION_ID: '$OUR_SESSION_ID'" >> "$DEBUG_LOG"
+      echo "  match: $(test "$lock_owner" == "$OUR_SESSION_ID" && echo yes || echo no)" >> "$DEBUG_LOG"
+
       # If we own this lock, we can use it
       if [[ "$lock_owner" == "$OUR_SESSION_ID" ]]; then
+        echo "  -> CLAIMING (owner match)" >> "$DEBUG_LOG"
         echo "$state_file"
         return 0
       fi
@@ -136,6 +167,7 @@ find_claimable_loop() {
   done
 
   # No claimable loops found
+  echo "=== No claimable loops found ===" >> "$DEBUG_LOG"
   return 1
 }
 
