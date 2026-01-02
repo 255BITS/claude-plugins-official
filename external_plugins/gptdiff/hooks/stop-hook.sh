@@ -102,13 +102,32 @@ find_claimable_loop() {
         return 0
       fi
     else
-      # No lock owner - this is an orphan loop (from before multi-instance support)
-      # Claim it
-      echo "ℹ️  Claiming orphan loop $(basename "$loop_dir")" >&2
-      echo "$OUR_SESSION_ID" > "$lock_owner_file"
-      echo "$now" > "$last_activity_file"
-      echo "$state_file"
-      return 0
+      # No lock owner file - this is an orphan loop (from before multi-instance support)
+      # Check if the state file has a session_id that matches ours
+      local state_session_id
+      state_session_id="$(sed -n 's/^session_id: "\(.*\)"$/\1/p' "$state_file" 2>/dev/null | head -1)"
+
+      if [[ -n "$state_session_id" ]]; then
+        # State file has session_id but no lock file - lock file was deleted or lost
+        # Only claim if session_id matches (same session that started it)
+        if [[ "$state_session_id" == "$OUR_SESSION_ID" ]]; then
+          echo "ℹ️  Reclaiming loop $(basename "$loop_dir") (session ID matches)" >&2
+          echo "$OUR_SESSION_ID" > "$lock_owner_file"
+          echo "$now" > "$last_activity_file"
+          echo "$state_file"
+          return 0
+        else
+          # Different session started this loop - don't claim it
+          echo "ℹ️  Loop $(basename "$loop_dir") was started by a different session (no lock file)" >&2
+          continue
+        fi
+      else
+        # Pre-update loop (no session_id in state file) - DON'T auto-claim
+        # User should explicitly clean up old loops with /gptdiff:stop
+        echo "⚠️  Found orphan loop $(basename "$loop_dir") from before multi-instance update" >&2
+        echo "   Use /gptdiff:stop to clean up old loops, then start a new one" >&2
+        continue
+      fi
     fi
   done
 
