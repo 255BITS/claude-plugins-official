@@ -7,12 +7,31 @@ allowed-tools: ["Bash", "Read"]
 
 Check the current loop status by running these commands:
 
-1. **Find all active loops**:
+1. **Find all active loops** (including lock ownership info):
    ```
    ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
    find "$ROOT/.claude/start" -name "state.local.md" 2>/dev/null | while read -r state_file; do
-     echo "=== Loop: $(dirname "$state_file" | xargs basename) ==="
+     LOOP_DIR="$(dirname "$state_file")"
+     SLUG="$(basename "$LOOP_DIR")"
+     echo "=== Loop: $SLUG ==="
      cat "$state_file"
+     echo ""
+     # Show lock ownership info
+     if [[ -f "$LOOP_DIR/.lock-owner" ]]; then
+       OWNER=$(cat "$LOOP_DIR/.lock-owner")
+       echo "Lock owner: $OWNER"
+     else
+       echo "Lock owner: (none - orphan loop)"
+     fi
+     if [[ -f "$LOOP_DIR/.last-activity" ]]; then
+       LAST_ACT=$(cat "$LOOP_DIR/.last-activity")
+       NOW=$(date +%s)
+       AGE=$((NOW - LAST_ACT))
+       echo "Last activity: ${AGE}s ago"
+       if [[ $AGE -gt 600 ]]; then
+         echo "  ⚠️  STALE LOCK - may be claimed by another instance"
+       fi
+     fi
      echo ""
    done
    if [[ -z "$(find "$ROOT/.claude/start" -name "state.local.md" 2>/dev/null)" ]]; then

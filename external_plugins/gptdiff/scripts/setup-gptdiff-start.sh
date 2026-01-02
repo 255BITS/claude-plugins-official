@@ -263,12 +263,17 @@ else
   TARGET_FILES_YAML="[]"
 fi
 
+# Generate a unique session ID to identify this Claude instance
+# Uses a combination of timestamp, random hex, and PID for uniqueness
+SESSION_ID="$(date +%s)-$(openssl rand -hex 4 2>/dev/null || echo $$)-$$"
+
 # Create state file
 {
   echo "---"
   echo "active: true"
   echo "iteration: 1"
   echo "max_iterations: $MAX_ITERATIONS"
+  echo "session_id: \"$SESSION_ID\""
   echo -n "target_dirs:"
   if [[ ${#TARGET_DIRS[@]} -eq 0 ]]; then
     echo " []"
@@ -302,6 +307,11 @@ fi
   echo "Please reply with a short progress note (or just \`ok\`) and then stop."
   echo "To cancel: /stop"
 } > "$LOOP_DIR/state.local.md"
+
+# Write lock file with session ID to claim ownership of this loop
+# Other Claude instances will check this before processing the loop
+echo "$SESSION_ID" > "$LOOP_DIR/.lock-owner"
+echo "$(date +%s)" > "$LOOP_DIR/.last-activity"
 
 cat <<EOF
 

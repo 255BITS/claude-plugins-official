@@ -38,16 +38,118 @@ if [[ ${#STATE_FILES[@]} -eq 0 ]]; then
   exit 0
 fi
 
-# For now, process the first active loop found
-# TODO: Could combine multiple loops into a single prompt
-STATE_FILE="${STATE_FILES[0]}"
+# Multi-instance safety: Find a loop we can claim
+# Each loop has a .lock-owner file with the session ID that owns it
+# We also track .last-activity to detect stale locks
+
+# Generate our session identifier from Claude Code's environment
+# We use CLAUDE_SESSION_ID if available, otherwise generate one based on process info
+# This should be consistent within a single Claude Code session
+OUR_SESSION_ID="${CLAUDE_SESSION_ID:-}"
+if [[ -z "$OUR_SESSION_ID" ]]; then
+  # Fall back to parent PID + tty - this is consistent within a session
+  OUR_SESSION_ID="auto-$(ps -o ppid= -p $$ 2>/dev/null | tr -d ' ')-$(tty 2>/dev/null | tr '/' '-' || echo 'notty')"
+fi
+
+# Stale lock timeout: 10 minutes (600 seconds)
+# If a lock hasn't been updated in this time, consider it abandoned
+STALE_LOCK_TIMEOUT=600
+
+find_claimable_loop() {
+  local now
+  now=$(date +%s)
+
+  for state_file in "${STATE_FILES[@]}"; do
+    local loop_dir
+    loop_dir="$(dirname "$state_file")"
+    local lock_owner_file="$loop_dir/.lock-owner"
+    local last_activity_file="$loop_dir/.last-activity"
+
+    # Check if there's an existing lock owner
+    if [[ -f "$lock_owner_file" ]]; then
+      local lock_owner
+      lock_owner="$(cat "$lock_owner_file" 2>/dev/null || echo "")"
+
+      # If we own this lock, we can use it
+      if [[ "$lock_owner" == "$OUR_SESSION_ID" ]]; then
+        echo "$state_file"
+        return 0
+      fi
+
+      # Check if the lock is stale
+      if [[ -f "$last_activity_file" ]]; then
+        local last_activity
+        last_activity="$(cat "$last_activity_file" 2>/dev/null || echo 0)"
+        local age=$((now - last_activity))
+
+        if [[ $age -gt $STALE_LOCK_TIMEOUT ]]; then
+          # Stale lock - break it and claim this loop
+          echo "⚠️  Breaking stale lock on loop $(basename "$loop_dir") (inactive for ${age}s)" >&2
+          echo "$OUR_SESSION_ID" > "$lock_owner_file"
+          echo "$now" > "$last_activity_file"
+          echo "$state_file"
+          return 0
+        else
+          # Lock is held by another active instance - skip this loop
+          echo "ℹ️  Loop $(basename "$loop_dir") is owned by another instance (last active ${age}s ago)" >&2
+          continue
+        fi
+      else
+        # No activity file but lock exists - treat as new, claim it
+        echo "$OUR_SESSION_ID" > "$lock_owner_file"
+        echo "$now" > "$last_activity_file"
+        echo "$state_file"
+        return 0
+      fi
+    else
+      # No lock owner - this is an orphan loop (from before multi-instance support)
+      # Claim it
+      echo "ℹ️  Claiming orphan loop $(basename "$loop_dir")" >&2
+      echo "$OUR_SESSION_ID" > "$lock_owner_file"
+      echo "$now" > "$last_activity_file"
+      echo "$state_file"
+      return 0
+    fi
+  done
+
+  # No claimable loops found
+  return 1
+}
+
+# Find a loop we can claim
+STATE_FILE=""
+if ! STATE_FILE="$(find_claimable_loop)"; then
+  # All loops are owned by other instances
+  if [[ ${#STATE_FILES[@]} -gt 0 ]]; then
+    echo "ℹ️  All ${#STATE_FILES[@]} GPTDiff loop(s) are owned by other Claude instances." >&2
+    echo "   Use /gptdiff:stop to force-cancel all loops, or wait for them to complete." >&2
+  fi
+  exit 0
+fi
+
+if [[ -z "$STATE_FILE" ]]; then
+  # No state file found (shouldn't happen, but be safe)
+  exit 0
+fi
+
+# Get the loop directory for this state file
+LOOP_DIR_FOR_LOCK="$(dirname "$STATE_FILE")"
+
+# Update last activity timestamp to keep our lock fresh
+echo "$(date +%s)" > "$LOOP_DIR_FOR_LOCK/.last-activity"
 
 # If multiple loops are active, warn the user
 if [[ ${#STATE_FILES[@]} -gt 1 ]]; then
-  echo "⚠️  Multiple GPTDiff loops active (${#STATE_FILES[@]} loops). Processing first one." >&2
-  echo "   Active loops:" >&2
+  echo "⚠️  Multiple GPTDiff loops active (${#STATE_FILES[@]} loops). Processing owned loop: $(basename "$LOOP_DIR_FOR_LOCK")" >&2
+  echo "   All active loops:" >&2
   for sf in "${STATE_FILES[@]}"; do
-    echo "   - $(dirname "$sf" | xargs basename)" >&2
+    local_loop_dir="$(dirname "$sf")"
+    local_owner="$(cat "$local_loop_dir/.lock-owner" 2>/dev/null || echo "unknown")"
+    if [[ "$local_owner" == "$OUR_SESSION_ID" ]]; then
+      echo "   - $(basename "$local_loop_dir") (owned by this instance)" >&2
+    else
+      echo "   - $(basename "$local_loop_dir") (owned by: ${local_owner:0:20}...)" >&2
+    fi
   done
 fi
 
@@ -459,11 +561,15 @@ if [[ -n "$FEEDBACK_CMD" ]] && [[ "${EXTERNAL_LLM_PENDING:-false}" != "true" ]];
 fi
 
 # Bump iteration in state file (only if not waiting for external LLM)
+# Also refresh our lock activity timestamp to keep the lock alive
 if [[ "${EXTERNAL_LLM_PENDING:-false}" != "true" ]]; then
   NEXT_ITERATION=$((ITERATION + 1))
   TEMP_FILE="${STATE_FILE}.tmp.$$"
   sed "s/^iteration: .*/iteration: $NEXT_ITERATION/" "$STATE_FILE" > "$TEMP_FILE"
   mv "$TEMP_FILE" "$STATE_FILE"
+
+  # Refresh lock activity timestamp
+  echo "$(date +%s)" > "$LOOP_DIR/.last-activity"
 else
   NEXT_ITERATION=$ITERATION
 fi
