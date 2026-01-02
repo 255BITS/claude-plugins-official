@@ -42,13 +42,17 @@ fi
 # Each loop has a .lock-owner file with the session ID that owns it
 # We also track .last-activity to detect stale locks
 
-# Generate our session identifier from Claude Code's environment
-# We use CLAUDE_SESSION_ID if available, otherwise generate one based on process info
-# This should be consistent within a single Claude Code session
-OUR_SESSION_ID="${CLAUDE_SESSION_ID:-}"
-if [[ -z "$OUR_SESSION_ID" ]]; then
-  # Fall back to parent PID + tty - this is consistent within a session
-  OUR_SESSION_ID="auto-$(ps -o ppid= -p $$ 2>/dev/null | tr -d ' ')-$(tty 2>/dev/null | tr '/' '-' || echo 'notty')"
+# Get our session ID from the temp file (created by setup script)
+# This ensures setup and stop hook use the same session ID
+GIT_ROOT_HASH="$(echo "$ROOT_DIR" | md5sum | cut -c1-12)"
+SESSION_FILE="/tmp/claude-gptdiff-session-$GIT_ROOT_HASH"
+
+if [[ -f "$SESSION_FILE" ]]; then
+  OUR_SESSION_ID="$(cat "$SESSION_FILE")"
+else
+  # No session file - this instance didn't start any loops
+  # Generate a temporary ID (won't match any existing loops)
+  OUR_SESSION_ID="no-session-$(date +%s)-$$"
 fi
 
 # Stale lock timeout: 10 minutes (600 seconds)
