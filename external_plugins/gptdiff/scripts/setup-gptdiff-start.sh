@@ -264,18 +264,15 @@ else
 fi
 
 # Generate a unique session ID to identify this Claude instance
-# Store in a temp file keyed by git root so the stop hook can find it
+# ALWAYS create a new session ID when starting a loop - this prevents
+# new Claude sessions from accidentally claiming old loops
 GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 GIT_ROOT_HASH="$(echo "$GIT_ROOT" | md5sum | cut -c1-12)"
 SESSION_FILE="/tmp/claude-gptdiff-session-$GIT_ROOT_HASH"
 
-# Create or reuse session ID for this git repo
-if [[ -f "$SESSION_FILE" ]]; then
-  SESSION_ID="$(cat "$SESSION_FILE")"
-else
-  SESSION_ID="$(date +%s)-$(openssl rand -hex 4 2>/dev/null || echo $$)-$$"
-  echo "$SESSION_ID" > "$SESSION_FILE"
-fi
+# Always generate fresh session ID for new loops
+SESSION_ID="$(date +%s)-$(openssl rand -hex 4 2>/dev/null || echo $$)-$$"
+echo "$SESSION_ID" > "$SESSION_FILE"
 
 # Create state file
 {

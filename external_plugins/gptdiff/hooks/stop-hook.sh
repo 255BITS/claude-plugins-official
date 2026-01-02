@@ -104,9 +104,25 @@ find_claimable_loop() {
       echo "  OUR_SESSION_ID: '$OUR_SESSION_ID'" >> "$DEBUG_LOG"
       echo "  match: $(test "$lock_owner" == "$OUR_SESSION_ID" && echo yes || echo no)" >> "$DEBUG_LOG"
 
-      # If we own this lock, we can use it
+      # If we own this lock, verify the loop is actually active
+      # (last-activity must be recent - this prevents stale session files from matching)
       if [[ "$lock_owner" == "$OUR_SESSION_ID" ]]; then
-        echo "  -> CLAIMING (owner match)" >> "$DEBUG_LOG"
+        if [[ -f "$last_activity_file" ]]; then
+          local last_activity
+          last_activity="$(cat "$last_activity_file" 2>/dev/null || echo 0)"
+          local activity_age=$((now - last_activity))
+          echo "  last_activity age: ${activity_age}s" >> "$DEBUG_LOG"
+
+          # If last activity was more than 15 minutes ago, this might be a stale session file
+          # matching an old loop. Require the user to explicitly restart.
+          if [[ $activity_age -gt 900 ]]; then
+            echo "  -> SKIP (session ID matches but loop inactive for ${activity_age}s)" >> "$DEBUG_LOG"
+            echo "⚠️  Loop $(basename "$loop_dir") has matching session but was inactive for ${activity_age}s" >&2
+            echo "   The previous Claude session may have ended. Use /gptdiff:start to restart." >&2
+            continue
+          fi
+        fi
+        echo "  -> CLAIMING (owner match, loop active)" >> "$DEBUG_LOG"
         echo "$state_file"
         return 0
       fi
