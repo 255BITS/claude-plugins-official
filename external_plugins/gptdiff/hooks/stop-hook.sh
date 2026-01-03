@@ -718,7 +718,7 @@ else
   if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
     SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGETS_DISPLAY | External LLM | /stop to stop"
   else
-    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGETS_DISPLAY | Claude Code | /stop to stop"
+    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGETS_DISPLAY | /stop to stop"
   fi
 fi
 
@@ -812,11 +812,11 @@ $FEEDBACK_TAIL
   fi
 
   # Add agent feedback if present (include ALL of it - valuable context)
+  # Display as markdown (not code block) so the agent's voice comes through naturally
   if [[ -n "$AGENT_FEEDBACK_CONTENT" ]]; then
-    FEEDBACK_SECTION+="### 🧑‍💼 Expert Agent Feedback (from previous iteration)
-\`\`\`
+    FEEDBACK_SECTION+="### 🧑‍💼 Feedback Agent Says:
+
 $AGENT_FEEDBACK_CONTENT
-\`\`\`
 
 "
   fi
@@ -870,11 +870,12 @@ $img
     fi
 
     AGENT_INSTRUCTION="### 🤖 Agent-driven iteration
-1. **Spawn agent** (\`$AGENT_TYPE_DISPLAY\`) to analyze and decide the next improvement
-2. **Do exactly what the agent says** - one concrete change
-3. **Respond 'ok'** to end turn
-
-The agent decides. You execute."
+1. **Spawn agent** (\`$AGENT_TYPE_DISPLAY\`) with this context:
+   - Introduce yourself to the agent
+   - Tell them: \"You are the **feedback agent** for a GPTDiff improvement loop. Analyze the current state and recommend ONE specific improvement. Be specific and actionable. Iteration $ITERATION of $MAX_ITERATIONS. Goal: $GOAL\"
+2. **Save their feedback** to \`$AGENT_FEEDBACK_FILE\` - write the agent's full response so you can reference it next iteration
+3. **Work toward the goal** using the agent's input - make one concrete change
+4. **Respond 'ok'** to end turn"
   else
     AGENT_INSTRUCTION="### This iteration
 1. **Pick ONE improvement** toward the goal
@@ -915,7 +916,7 @@ fi
 DEBUG_PROMPT_FILE="$LOOP_DIR/debug-prompt.txt"
 {
   echo "============================================================"
-  echo "DEBUG: Full prompt sent to Claude Code"
+  echo "DEBUG: Full prompt sent to Claude"
   echo "UTC: $(utc_now)"
   echo "Iteration: $ITERATION"
   echo "============================================================"
