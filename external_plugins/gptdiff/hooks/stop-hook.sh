@@ -817,19 +817,22 @@ $img
 
   # If feedback_agent is "auto" or any custom value, enable agent feedback
   if [[ -n "$FEEDBACK_AGENT" ]]; then
-    if [[ "$ITERATION" -eq 1 ]]; then
-      # ITERATION 1: Spawn agent FIRST, then make ONE change
-      AGENT_INSTRUCTION="
-
-### Agent feedback enabled
-Spawn agent → get guidance → make ONE change → say ok"
-    else
-      # ITERATIONS 2+: Make change, then spawn agent
-      AGENT_INSTRUCTION="
-
-### Agent feedback enabled
-Make ONE change → spawn agent for feedback → say ok"
+    AGENT_TYPE_DISPLAY="$FEEDBACK_AGENT"
+    if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
+      AGENT_TYPE_DISPLAY="(pick best agent for goal)"
     fi
+
+    AGENT_INSTRUCTION="### 🤖 Agent-driven iteration
+1. **Spawn agent** (\`$AGENT_TYPE_DISPLAY\`) to analyze and decide the next improvement
+2. **Do exactly what the agent says** - one concrete change
+3. **Respond 'ok'** to end turn
+
+The agent decides. You execute."
+  else
+    AGENT_INSTRUCTION="### This iteration
+1. **Pick ONE improvement** toward the goal
+2. **Make the change**
+3. **Respond 'ok'** to end turn"
   fi
 
   REASON_PROMPT="
@@ -845,22 +848,12 @@ $GOAL
 ### Progress
 $ITER_INFO
 
-### This iteration: DO ONE THING
-1. Pick ONE concrete improvement (don't plan the whole thing)
-2. Make the change
-3. Say \"ok\" or give a one-line summary
-4. The loop continues automatically
-
-**DO NOT:**
-- Stop the loop before max iterations
-- Announce you're \"done\" or \"finished\"
-- Plan out all remaining iterations
-- Ask if you should continue
-
-**DO:**
-- Make one small, meaningful change
-- Keep going until the loop ends naturally
 $AGENT_INSTRUCTION
+
+### Rules
+- **DO NOT** stop the loop early, announce \"done\", or ask to continue
+- **DO** make one small change per iteration
+- The loop ends when max iterations reached
 
 ${IMAGE_SECTION}${FEEDBACK_SECTION}$(if [[ -n "$EVAL_TAIL" ]]; then echo "### Signals"; echo '```'; echo "$EVAL_TAIL"; echo '```'; echo ""; fi)
 
@@ -868,7 +861,7 @@ $(if [[ -n "$CHANGED_FILES_PREVIEW" ]]; then echo "### Recent changes"; echo '``
 
 ---
 
-**Make ONE change, say \"ok\", loop continues.**"
+**Make ONE change, then respond \"ok\" to end your turn. Next iteration starts automatically.**"
 fi
 
 # Debug: Write full prompt to log file
