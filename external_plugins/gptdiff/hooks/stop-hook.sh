@@ -383,10 +383,57 @@ TARGETS_DISPLAY="${TARGETS_DISPLAY% }"  # Trim trailing space
 LOOP_DIR="$(dirname "$STATE_FILE")"
 TARGET_SLUG="$(basename "$LOOP_DIR")"
 
-# Stop if max iterations exceeded (0 = unlimited)
+# If max iterations exceeded, show summary and clean up
 if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -gt $MAX_ITERATIONS ]]; then
-  echo "🛑 GPTDiff loop: Max iterations ($MAX_ITERATIONS) reached." >&2
+  echo "🛑 GPTDiff loop complete: $MAX_ITERATIONS iterations finished." >&2
+
+  # Get git diff summary for the prompt
+  FINAL_DIFFSTAT=""
+  FINAL_LOG=""
+  if git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    FINAL_DIFFSTAT="$(git -C "$ROOT_DIR" diff --stat 2>/dev/null | tail -20 || true)"
+    FINAL_LOG="$(git -C "$ROOT_DIR" log --oneline -10 2>/dev/null || true)"
+  fi
+
+  # Clean up state file
   rm -f "$STATE_FILE"
+  rm -f "$LOOP_DIR/.lock-owner"
+  rm -f "$LOOP_DIR/.last-activity"
+
+  # Return summary prompt
+  SUMMARY_PROMPT="
+╔══════════════════════════════════════════════════════════════════╗
+║  ✅ GPTDIFF LOOP COMPLETE - $MAX_ITERATIONS iterations                       ║
+╚══════════════════════════════════════════════════════════════════╝
+
+**Goal:** $GOAL
+**Targets:** $TARGETS_DISPLAY
+
+### Summary of changes
+\`\`\`
+$FINAL_DIFFSTAT
+\`\`\`
+
+### Recent commits
+\`\`\`
+$FINAL_LOG
+\`\`\`
+
+---
+
+**Provide a brief summary of what was accomplished across all iterations.**
+- What improved?
+- What's the current state?
+- Any suggested next steps?"
+
+  jq -n \
+    --arg prompt "$SUMMARY_PROMPT" \
+    --arg msg "✅ GPTDiff loop complete ($MAX_ITERATIONS iterations). Summarizing changes." \
+    '{
+      "decision": "block",
+      "reason": $prompt,
+      "systemMessage": $msg
+    }'
   exit 0
 fi
 
