@@ -811,15 +811,6 @@ $img
 "
   fi
 
-  # Build exploration instruction - always encourage feedback gathering
-  # Tell Claude about the image save convention
-  EXPLORATION_INSTRUCTION="5. **Gather feedback** - After making changes, run tools to evaluate progress:
-   - Take screenshots if working on UI/visual elements
-   - Run simulations or tests if working on logic
-   - Execute test suites to verify correctness
-   - **To persist images for next iteration**: Save to \`$LOOP_DIR/feedback-image.png\`
-     (The loop will automatically include this image in the next iteration)"
-
   # Build agent feedback instruction if feedback_agent is set
   AGENT_INSTRUCTION=""
   AGENTS_CATALOG=""
@@ -827,104 +818,17 @@ $img
   # If feedback_agent is "auto" or any custom value, enable agent feedback
   if [[ -n "$FEEDBACK_AGENT" ]]; then
     if [[ "$ITERATION" -eq 1 ]]; then
-      # ITERATION 1: Spawn agent FIRST to analyze initial state and guide first improvement
-      if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
-        AGENT_INSTRUCTION="
-### ⚠️ ITERATION 1: Spawn expert agent FIRST
+      # ITERATION 1: Spawn agent FIRST, then make ONE change
+      AGENT_INSTRUCTION="
 
-**BEFORE making any changes**, you MUST spawn an agent to analyze the initial state.
-
-1. Check your available agents (Task tool)
-2. Pick the one best suited for the goal
-3. Spawn it with this prompt:
-
-   \`\`\`
-   Analyze the initial state of: $TARGETS_DISPLAY
-   Goal: $GOAL
-
-   This is iteration 1 - no changes have been made yet.
-   Review the current code and provide:
-   1. Assessment of current state
-   2. Priority areas to improve
-   3. Specific first improvement to make
-   4. What to watch out for
-
-   IMPORTANT: Do NOT read any existing agent-feedback.txt - it may contain
-   stale content from a previous loop. Start fresh and overwrite the file.
-
-   Write your analysis to: $LOOP_DIR/agent-feedback.txt
-   \`\`\`
-
-4. **WAIT for the agent's response**
-5. **Output the agent's feedback** so the user can see it
-6. **THEN** make ONE improvement based on the agent's guidance
-
-Do NOT skip the agent step. Do NOT make changes before the agent analyzes."
-      else
-        AGENT_INSTRUCTION="
-### ⚠️ ITERATION 1: Spawn expert agent FIRST
-
-**BEFORE making any changes**, spawn \`$FEEDBACK_AGENT\` to analyze the initial state.
-
-Use Task tool with \`subagent_type: \"$FEEDBACK_AGENT\"\`
-
-Prompt:
-\`\`\`
-Analyze the initial state of: $TARGETS_DISPLAY
-Goal: $GOAL
-
-This is iteration 1 - no changes have been made yet.
-Review the current code and provide:
-1. Assessment of current state
-2. Priority areas to improve
-3. Specific first improvement to make
-4. What to watch out for
-
-IMPORTANT: Do NOT read any existing agent-feedback.txt - it may contain
-stale content from a previous loop. Start fresh and overwrite the file.
-
-Write your analysis to: $LOOP_DIR/agent-feedback.txt
-\`\`\`
-
-**WAIT for the agent's response.**
-**Output the agent's feedback** so the user can see it.
-**THEN** make ONE improvement based on their guidance.
-
-Do NOT skip the agent step. Do NOT make changes before the agent analyzes."
-      fi
+### Agent feedback enabled
+Spawn agent → get guidance → make ONE change → say ok"
     else
-      # ITERATIONS 2+: Make improvement, then spawn agent for feedback
-      if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
-        AGENT_INSTRUCTION="
-6. **REQUIRED: Spawn expert agent** - After making your improvement, spawn a feedback agent.
+      # ITERATIONS 2+: Make change, then spawn agent
+      AGENT_INSTRUCTION="
 
-   **How to invoke:**
-   1. Check your available agents (Task tool)
-   2. Pick the agent best suited for the NEXT subgoal toward the goal
-   3. Use the Task tool with that agent's name as \`subagent_type\`
-   4. In your prompt, provide context:
-      - Files to review: \`$TARGETS_DISPLAY\`
-      - Overall goal: $GOAL
-      - Request specific, actionable feedback for the next iteration
-      - Write feedback to: \`$LOOP_DIR/agent-feedback.txt\`
-
-   If no specialized agent fits, use \`general-purpose\` with a detailed prompt.
-
-   **Output the agent's feedback** so the user can see it. Do NOT skip this step."
-      else
-        AGENT_INSTRUCTION="
-6. **REQUIRED: Spawn expert agent** - After making your improvement, spawn \`$FEEDBACK_AGENT\`.
-
-   Use the Task tool with \`subagent_type: \"$FEEDBACK_AGENT\"\`
-
-   In your prompt, provide:
-   - Files to review: \`$TARGETS_DISPLAY\`
-   - Overall goal: $GOAL
-   - Request specific, actionable feedback for the next iteration
-   - Write feedback to: \`$LOOP_DIR/agent-feedback.txt\`
-
-   **Output the agent's feedback** so the user can see it. Do NOT skip this step."
-      fi
+### Agent feedback enabled
+Make ONE change → spawn agent for feedback → say ok"
     fi
   fi
 
@@ -933,31 +837,38 @@ Do NOT skip the agent step. Do NOT make changes before the agent analyzes."
 ║  🔁 GPTDIFF LOOP - ITERATION $ITERATION of $(printf "%-3s" "$(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "∞"; fi)")                          ║
 ╚══════════════════════════════════════════════════════════════════╝
 
-You are running an iterative improvement loop.
+**⚠️ CRITICAL: You MUST complete this iteration. Do NOT stop the loop early.**
 
-### Goal
+### Goal (directional - make progress, don't try to finish)
 $GOAL
 
 ### Progress
 $ITER_INFO
 
-### Instructions
-1. **Explore** the codebase to find relevant files
-2. **Make ONE coherent improvement** - keep changes small and reviewable
-3. **Preserve** existing structure and intent; avoid unnecessary rewrites
-4. **Run commands** as needed:
-   - Commit changes: \`git add . && git commit -m \"...\"\`
-   - Run tests or linters to verify
-   - Any other maintenance commands
-$EXPLORATION_INSTRUCTION$AGENT_INSTRUCTION
+### This iteration: DO ONE THING
+1. Pick ONE concrete improvement (don't plan the whole thing)
+2. Make the change
+3. Say \"ok\" or give a one-line summary
+4. The loop continues automatically
 
-${IMAGE_SECTION}${FEEDBACK_SECTION}$(if [[ -n "$EVAL_TAIL" ]]; then echo "### Signals from evaluators"; echo '```'; echo "$EVAL_TAIL"; echo '```'; echo ""; fi)
+**DO NOT:**
+- Stop the loop before max iterations
+- Announce you're \"done\" or \"finished\"
+- Plan out all remaining iterations
+- Ask if you should continue
+
+**DO:**
+- Make one small, meaningful change
+- Keep going until the loop ends naturally
+$AGENT_INSTRUCTION
+
+${IMAGE_SECTION}${FEEDBACK_SECTION}$(if [[ -n "$EVAL_TAIL" ]]; then echo "### Signals"; echo '```'; echo "$EVAL_TAIL"; echo '```'; echo ""; fi)
 
 $(if [[ -n "$CHANGED_FILES_PREVIEW" ]]; then echo "### Recent changes"; echo '```'; echo "$CHANGED_FILES_PREVIEW"; echo '```'; fi)
 
 ---
 
-**Make ONE improvement toward the goal, then reply with a brief summary.**"
+**Make ONE change, say \"ok\", loop continues.**"
 fi
 
 # Debug: Write full prompt to log file
