@@ -319,7 +319,12 @@ fi
 # Validate all target directories exist
 while IFS= read -r dir; do
   [[ -z "$dir" ]] && continue
-  TARGET_ABS="$ROOT_DIR/$dir"
+  # Handle both absolute and relative paths
+  if [[ "$dir" = /* ]]; then
+    TARGET_ABS="$dir"
+  else
+    TARGET_ABS="$ROOT_DIR/$dir"
+  fi
   if [[ ! -d "$TARGET_ABS" ]]; then
     echo "⚠️  Loop error: target directory does not exist: $TARGET_ABS" >&2
     rm -f "$STATE_FILE"
@@ -330,7 +335,12 @@ done <<< "$TARGET_DIRS_STR"
 # Validate all target files exist
 while IFS= read -r file; do
   [[ -z "$file" ]] && continue
-  TARGET_ABS="$ROOT_DIR/$file"
+  # Handle both absolute and relative paths
+  if [[ "$file" = /* ]]; then
+    TARGET_ABS="$file"
+  else
+    TARGET_ABS="$ROOT_DIR/$file"
+  fi
   if [[ ! -f "$TARGET_ABS" ]]; then
     echo "⚠️  Loop error: target file does not exist: $TARGET_ABS" >&2
     rm -f "$STATE_FILE"
@@ -431,11 +441,19 @@ if [[ $ITERATION -gt 1 ]] && git -C "$ROOT_DIR" rev-parse --is-inside-work-tree 
   GIT_TARGETS=()
   while IFS= read -r dir; do
     [[ -z "$dir" ]] && continue
-    GIT_TARGETS+=("$ROOT_DIR/$dir")
+    if [[ "$dir" = /* ]]; then
+      GIT_TARGETS+=("$dir")
+    else
+      GIT_TARGETS+=("$ROOT_DIR/$dir")
+    fi
   done <<< "$TARGET_DIRS_STR"
   while IFS= read -r file; do
     [[ -z "$file" ]] && continue
-    GIT_TARGETS+=("$ROOT_DIR/$file")
+    if [[ "$file" = /* ]]; then
+      GIT_TARGETS+=("$file")
+    else
+      GIT_TARGETS+=("$ROOT_DIR/$file")
+    fi
   done <<< "$TARGET_FILES_STR"
 
   # Check for changes in target paths
@@ -561,11 +579,19 @@ set +e
 PREPARE_ARGS=""
 while IFS= read -r dir; do
   [[ -z "$dir" ]] && continue
-  PREPARE_ARGS+=" --dir \"$ROOT_DIR/$dir\""
+  if [[ "$dir" = /* ]]; then
+    PREPARE_ARGS+=" --dir \"$dir\""
+  else
+    PREPARE_ARGS+=" --dir \"$ROOT_DIR/$dir\""
+  fi
 done <<< "$TARGET_DIRS_STR"
 while IFS= read -r file; do
   [[ -z "$file" ]] && continue
-  PREPARE_ARGS+=" --file \"$ROOT_DIR/$file\""
+  if [[ "$file" = /* ]]; then
+    PREPARE_ARGS+=" --file \"$file\""
+  else
+    PREPARE_ARGS+=" --file \"$ROOT_DIR/$file\""
+  fi
 done <<< "$TARGET_FILES_STR"
 FILE_LIST="$(eval python3 "$PLUGIN_HOOKS_DIR/prepare_context.py" $PREPARE_ARGS --list-only 2>/dev/null)"
 set -e
