@@ -768,7 +768,7 @@ if [[ -n "$FEEDBACK_AGENT" ]]; then
 **REQUIRED STEPS (in order):**
 
 1. **Use the Task tool NOW** with the most relevant specialized subagent_type:
-   - Prompt: \"Review this for: $GOAL. Find ONE specific improvement and explain why it matters.\"
+   - Prompt: \"First, introduce yourself - say hi and briefly announce your role/specialty. Then review this for: $GOAL. Find ONE specific improvement and explain why it matters.\"
 
 2. **Save feedback** to \`$AGENT_FEEDBACK_FILE\`
 

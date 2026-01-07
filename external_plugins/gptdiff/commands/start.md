@@ -26,7 +26,9 @@ The user provided a goal directly. **YOU MUST spawn an agent to analyze the proj
 
    Prompt the agent:
    ```
-   Analyze this project for the goal: "$ARGUMENTS"
+   First, introduce yourself - say hi and briefly announce your role/specialty.
+
+   Then analyze this project for the goal: "$ARGUMENTS"
 
    1. Explore the project structure - what kind of project is this?
    2. Identify the domain (game, web app, API, CLI tool, library, etc.)
@@ -65,7 +67,9 @@ Full interactive mode. **YOU MUST spawn an agent to analyze the project.**
 
    Prompt the agent:
    ```
-   Analyze this project comprehensively:
+   First, introduce yourself - say hi and briefly announce your role/specialty.
+
+   Then analyze this project comprehensively:
 
    1. Explore the full project structure
    2. Identify the project domain (game, web app, API, CLI tool, library, etc.)
