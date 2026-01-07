@@ -5,16 +5,12 @@
 # Implements an in-session agent loop that:
 #   - runs optional eval command (signals/metrics)
 #   - runs optional verification command (for feedback, does not gate)
-#   - makes improvements via LLM (external or Claude Code)
+#   - makes improvements via Claude Code
 #
 # The loop is activated by /start which creates:
 #   .claude/start/{slug}/state.local.md
 #
 # Multiple loops can run concurrently (each with different targets)
-#
-# Inference mode:
-#   - If GPTDIFF_LLM_API_KEY is set: uses external LLM via gptdiff Python API
-#   - Otherwise: uses Claude Code's own inference (no API key needed)
 
 set -euo pipefail
 
@@ -279,8 +275,6 @@ EVAL_CMD_RAW="$(yaml_get_raw eval_cmd)"
 FEEDBACK_CMD_RAW="$(yaml_get_raw feedback_cmd)"
 FEEDBACK_IMAGE_RAW="$(yaml_get_raw feedback_image)"
 FEEDBACK_AGENT_RAW="$(yaml_get_raw feedback_agent)"
-MODEL_RAW="$(yaml_get_raw model)"
-INFERENCE_MODE_RAW="$(yaml_get_raw inference_mode)"
 
 # Parse arrays for multiple targets
 TARGET_DIRS_STR="$(yaml_get_array target_dirs)"
@@ -296,16 +290,12 @@ EVAL_CMD="$(yaml_unescape "$(strip_yaml_quotes "$EVAL_CMD_RAW")")"
 FEEDBACK_CMD="$(yaml_unescape "$(strip_yaml_quotes "$FEEDBACK_CMD_RAW")")"
 FEEDBACK_IMAGE="$(yaml_unescape "$(strip_yaml_quotes "$FEEDBACK_IMAGE_RAW")")"
 FEEDBACK_AGENT="$(yaml_unescape "$(strip_yaml_quotes "$FEEDBACK_AGENT_RAW")")"
-MODEL="$(yaml_unescape "$(strip_yaml_quotes "$MODEL_RAW")")"
-INFERENCE_MODE="$(yaml_unescape "$(strip_yaml_quotes "$INFERENCE_MODE_RAW")")"
 
 # Normalize null-like values
 if [[ "${EVAL_CMD_RAW:-}" == "null" ]] || [[ -z "${EVAL_CMD:-}" ]]; then EVAL_CMD=""; fi
 if [[ "${FEEDBACK_CMD_RAW:-}" == "null" ]] || [[ -z "${FEEDBACK_CMD:-}" ]]; then FEEDBACK_CMD=""; fi
 if [[ "${FEEDBACK_IMAGE_RAW:-}" == "null" ]] || [[ -z "${FEEDBACK_IMAGE:-}" ]]; then FEEDBACK_IMAGE=""; fi
 if [[ "${FEEDBACK_AGENT_RAW:-}" == "null" ]] || [[ -z "${FEEDBACK_AGENT:-}" ]]; then FEEDBACK_AGENT=""; fi
-if [[ "${MODEL_RAW:-}" == "null" ]] || [[ -z "${MODEL:-}" ]]; then MODEL=""; fi
-if [[ "${INFERENCE_MODE_RAW:-}" == "null" ]] || [[ -z "${INFERENCE_MODE:-}" ]]; then INFERENCE_MODE="claude"; fi
 
 # Validate numeric fields
 if [[ ! "$ITERATION" =~ ^[0-9]+$ ]]; then
@@ -580,128 +570,15 @@ done <<< "$TARGET_FILES_STR"
 FILE_LIST="$(eval python3 "$PLUGIN_HOOKS_DIR/prepare_context.py" $PREPARE_ARGS --list-only 2>/dev/null)"
 set -e
 
-# Determine inference mode: external LLM or Claude Code
-# Respect the saved inference_mode from state file (set during /start)
-USE_EXTERNAL_LLM="false"
-if [[ "$INFERENCE_MODE" == "external" ]]; then
-  if [[ -n "${GPTDIFF_LLM_API_KEY:-}" ]]; then
-    USE_EXTERNAL_LLM="true"
-  else
-    echo "⚠️  Loop: External LLM mode requested but GPTDIFF_LLM_API_KEY not set. Falling back to Claude Code." >&2
-  fi
-fi
-
-# Build the goal prompt for the LLM (used by both modes)
-GPTDIFF_GOAL="Iteration: $ITERATION / $(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "unlimited"; fi)
-Targets: $TARGETS_DISPLAY
-
-GOAL:
-$GOAL
-
-CONSTRAINTS:
-- Make one coherent, meaningful improvement per iteration (small, reviewable diffs).
-- Preserve existing intent and structure; avoid unnecessary rewrites.
-- Keep changes focused and reviewable.
-- ONLY modify files within the specified targets.
-
-SIGNALS (optional):
---- eval (tail) ---
-$EVAL_TAIL
-
-$(if [[ -n "$FEEDBACK_TAIL" ]]; then echo "--- feedback from previous iteration ---"; echo "$FEEDBACK_TAIL"; fi)
-"
-
-# Run the appropriate inference mode
-GPTDIFF_EXIT=0
-if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
-  # External LLM mode: use gptdiff Python API
-  append_header "$GPTDIFF_LOG" "GPTDIFF_EXTERNAL_LLM"
-  {
-    echo "Mode: External LLM (GPTDIFF_LLM_API_KEY set)"
-    echo "Model: ${MODEL:-${GPTDIFF_MODEL:-default}}"
-    echo ""
-    echo "Goal prompt:"
-    echo "$GPTDIFF_GOAL"
-    echo ""
-    echo "----- gptdiff output -----"
-  } >> "$GPTDIFF_LOG"
-
-  # Run gptdiff in background to avoid hook timeout
-  PENDING_FILE="$LOOP_DIR/pending"
-  RESULT_FILE="$LOOP_DIR/result"
-  EXTERNAL_LLM_PENDING="false"
-
-  # Check if previous background job is still running
-  if [[ -f "$PENDING_FILE" ]]; then
-    PID=$(cat "$PENDING_FILE" 2>/dev/null)
-    if kill -0 "$PID" 2>/dev/null; then
-      echo "⏳ External LLM still processing (PID $PID)..." >&2
-      EXTERNAL_LLM_PENDING="true"
-      GPTDIFF_EXIT=0
-    else
-      # Previous job finished, check result
-      if [[ -f "$RESULT_FILE" ]]; then
-        GPTDIFF_EXIT=$(cat "$RESULT_FILE")
-        echo "✅ External LLM completed (exit: $GPTDIFF_EXIT)" >&2
-      else
-        GPTDIFF_EXIT=1
-        echo "⚠️ External LLM job finished but no result found" >&2
-      fi
-      rm -f "$PENDING_FILE" "$RESULT_FILE"
-    fi
-  else
-    # Start new background job
-    echo "🚀 Starting external LLM in background..." >&2
-
-    # Build gptdiff_apply.py arguments for multiple targets
-    APPLY_ARGS="--verbose"
-    if [[ -n "$MODEL" ]]; then
-      APPLY_ARGS+=" --model \"$MODEL\""
-    fi
-    # Add feedback images - both explicit and auto-detected
-    if [[ -n "$FEEDBACK_IMAGE" ]] && [[ -f "$FEEDBACK_IMAGE" ]]; then
-      APPLY_ARGS+=" --image \"$FEEDBACK_IMAGE\""
-    fi
-    # Auto-detect Claude-saved feedback images
-    for ext in png jpg jpeg gif webp; do
-      AUTO_IMAGE="$LOOP_DIR/feedback-image.$ext"
-      if [[ -f "$AUTO_IMAGE" ]] && [[ "$AUTO_IMAGE" != "$FEEDBACK_IMAGE" ]]; then
-        APPLY_ARGS+=" --image \"$AUTO_IMAGE\""
-      fi
-    done
-    while IFS= read -r dir; do
-      [[ -z "$dir" ]] && continue
-      APPLY_ARGS+=" --dir \"$ROOT_DIR/$dir\""
-    done <<< "$TARGET_DIRS_STR"
-    while IFS= read -r file; do
-      [[ -z "$file" ]] && continue
-      APPLY_ARGS+=" --file \"$ROOT_DIR/$file\""
-    done <<< "$TARGET_FILES_STR"
-
-    (
-      cd "$ROOT_DIR" || exit 127
-      eval python3 "$PLUGIN_HOOKS_DIR/gptdiff_apply.py" $APPLY_ARGS "\"$GPTDIFF_GOAL\"" >> "$GPTDIFF_LOG" 2>&1
-      echo $? > "$RESULT_FILE"
-      rm -f "$PENDING_FILE"
-    ) &
-    BACKGROUND_PID=$!
-    echo "$BACKGROUND_PID" > "$PENDING_FILE"
-    echo "   PID: $BACKGROUND_PID - check /status or wait for next iteration" >&2
-    EXTERNAL_LLM_PENDING="true"
-    GPTDIFF_EXIT=0
-  fi
-else
-  # Claude Code mode: just log, prompt will be returned to Claude Code
-  append_header "$GPTDIFF_LOG" "CLAUDE_CODE_INFERENCE"
-  {
-    echo "Mode: Claude Code inference (no GPTDIFF_LLM_API_KEY)"
-    echo "Iteration: $ITERATION"
-    echo "Goal: $GOAL"
-    echo "Files in scope:"
-    echo "$FILE_LIST"
-    echo ""
-  } >> "$GPTDIFF_LOG"
-fi
+# Log iteration info
+append_header "$GPTDIFF_LOG" "CLAUDE_CODE_INFERENCE"
+{
+  echo "Iteration: $ITERATION"
+  echo "Goal: $GOAL"
+  echo "Files in scope:"
+  echo "$FILE_LIST"
+  echo ""
+} >> "$GPTDIFF_LOG"
 
 # Write a small diffstat snapshot so the loop is visible
 if git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -718,7 +595,7 @@ fi
 # This captures external feedback like screenshots, test results, simulations
 FEEDBACK_EXIT=0
 FEEDBACK_JUST_RAN="false"
-if [[ -n "$FEEDBACK_CMD" ]] && [[ "${EXTERNAL_LLM_PENDING:-false}" != "true" ]]; then
+if [[ -n "$FEEDBACK_CMD" ]]; then
   append_header "$FEEDBACK_LOG" "FEEDBACK (iteration $ITERATION)"
   set +e
   (
@@ -736,19 +613,15 @@ if [[ -n "$FEEDBACK_CMD" ]] && [[ "${EXTERNAL_LLM_PENDING:-false}" != "true" ]];
   FEEDBACK_JUST_RAN="true"
 fi
 
-# Bump iteration in state file (only if not waiting for external LLM)
+# Bump iteration in state file
 # Also refresh our lock activity timestamp to keep the lock alive
-if [[ "${EXTERNAL_LLM_PENDING:-false}" != "true" ]]; then
-  NEXT_ITERATION=$((ITERATION + 1))
-  TEMP_FILE="${STATE_FILE}.tmp.$$"
-  sed "s/^iteration: .*/iteration: $NEXT_ITERATION/" "$STATE_FILE" > "$TEMP_FILE"
-  mv "$TEMP_FILE" "$STATE_FILE"
+NEXT_ITERATION=$((ITERATION + 1))
+TEMP_FILE="${STATE_FILE}.tmp.$$"
+sed "s/^iteration: .*/iteration: $NEXT_ITERATION/" "$STATE_FILE" > "$TEMP_FILE"
+mv "$TEMP_FILE" "$STATE_FILE"
 
-  # Refresh lock activity timestamp
-  echo "$(date +%s)" > "$LOOP_DIR/.last-activity"
-else
-  NEXT_ITERATION=$ITERATION
-fi
+# Refresh lock activity timestamp
+echo "$(date +%s)" > "$LOOP_DIR/.last-activity"
 
 # Build progress indicator
 if [[ $MAX_ITERATIONS -gt 0 ]]; then
@@ -773,155 +646,90 @@ fi
 if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $NEXT_ITERATION -gt $MAX_ITERATIONS ]]; then
   SYSTEM_MSG="🛑 FINAL ITERATION $ITER_INFO - Loop complete after this. Review: git diff"
 else
-  if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
-    SYSTEM_MSG="🔁 $ITER_INFO | $TARGETS_DISPLAY | External LLM | /stop to stop"
-  else
-    SYSTEM_MSG="🔁 $ITER_INFO | $TARGETS_DISPLAY | /stop to stop"
-  fi
+  SYSTEM_MSG="🔁 $ITER_INFO | $TARGETS_DISPLAY | /stop to stop"
 fi
 
 CHANGED_FILES_PREVIEW="$(tail -n 40 "$CHANGED_FILES_FILE" 2>/dev/null || true)"
 DIFFSTAT_PREVIEW="$(tail -n 80 "$DIFFSTAT_FILE" 2>/dev/null || true)"
 
-# Build the prompt based on inference mode
-if [[ "$USE_EXTERNAL_LLM" == "true" ]] && [[ "${EXTERNAL_LLM_PENDING:-false}" == "true" ]]; then
-  # External LLM is still processing - ask Claude to wait
-  REASON_PROMPT="
-╔══════════════════════════════════════════════════════════════════╗
-║  ⏳ LOOP - WAITING FOR EXTERNAL LLM                              ║
-╚══════════════════════════════════════════════════════════════════╝
+# Build the prompt for Claude Code
+# Get fresh feedback output if it just ran
+FRESH_FEEDBACK=""
+if [[ "$FEEDBACK_JUST_RAN" == "true" ]] && [[ -f "$FEEDBACK_LOG" ]]; then
+  FRESH_FEEDBACK="$(tail -n 100 "$FEEDBACK_LOG" | sed 's/\r$//')"
+fi
 
-**Mode:** External LLM (gptdiff)
-**Targets:** \`$TARGETS_DISPLAY\`
-**Progress:** $ITER_INFO (iteration not advanced while waiting)
-
-The external LLM is still processing. This can take a few minutes.
-
-You can:
-- **Wait** and reply with 'ok' to check again
-- **Check logs**: \`tail -50 $GPTDIFF_LOG\`
-- **Cancel**: \`/stop\` to end the loop
-
----
-
-**Reply with 'ok' to check if the external LLM has finished.**"
-elif [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
-  # External LLM mode: gptdiff already made changes, review and act
-  REASON_PROMPT="$BASE_PROMPT
-
-╔══════════════════════════════════════════════════════════════════╗
-║  🔁 LOOP - ITERATION $ITERATION of $(printf "%-3s" "$(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "∞"; fi)")                                  ║
-╚══════════════════════════════════════════════════════════════════╝
-
-**Mode:** External LLM
-**Targets:** \`$TARGETS_DISPLAY\`
-**Progress:** $ITER_INFO
-**gptdiff exit:** $GPTDIFF_EXIT
-**eval exit:** $EVAL_EXIT
-
-### Changed files
-\`\`\`
-$CHANGED_FILES_PREVIEW
-\`\`\`
-
-### Diffstat
-\`\`\`
-$DIFFSTAT_PREVIEW
-\`\`\`
-
-### Your role
-The external LLM made the changes above. You may now:
-- **Review** the changes (use \`git diff\` to inspect)
-- **Run commands** based on the current state:
-  - Commit changes: \`git add . && git commit -m \"...\"\`
-  - Run tests or linters to verify
-  - Any other maintenance commands
-- **Summarize** what changed and what to improve next
-
----
-
-**Review the changes, run any appropriate commands, then reply with a brief summary.**"
-else
-  # Claude Code mode: ask Claude Code to make the improvements
-  # Claude Code can explore the codebase itself - no need to constrain to specific files
-
-  # Get fresh feedback output if it just ran
-  FRESH_FEEDBACK=""
-  if [[ "$FEEDBACK_JUST_RAN" == "true" ]] && [[ -f "$FEEDBACK_LOG" ]]; then
-    FRESH_FEEDBACK="$(tail -n 100 "$FEEDBACK_LOG" | sed 's/\r$//')"
-  fi
-
-  # Build feedback section for prompt
-  FEEDBACK_SECTION=""
-  if [[ -n "$FRESH_FEEDBACK" ]]; then
-    FEEDBACK_SECTION="### 📸 Feedback from this iteration
+# Build feedback section for prompt
+FEEDBACK_SECTION=""
+if [[ -n "$FRESH_FEEDBACK" ]]; then
+  FEEDBACK_SECTION="### 📸 Feedback from this iteration
 \`\`\`
 $FRESH_FEEDBACK
 \`\`\`
 
 "
-  elif [[ -n "$FEEDBACK_TAIL" ]]; then
-    FEEDBACK_SECTION="### 📸 Feedback from previous iteration
+elif [[ -n "$FEEDBACK_TAIL" ]]; then
+  FEEDBACK_SECTION="### 📸 Feedback from previous iteration
 \`\`\`
 $FEEDBACK_TAIL
 \`\`\`
 
 "
-  fi
+fi
 
-  # Add agent feedback if present (include ALL of it - valuable context)
-  # Display as markdown (not code block) so the agent's voice comes through naturally
-  if [[ -n "$AGENT_FEEDBACK_CONTENT" ]]; then
-    FEEDBACK_SECTION+="### 🧑‍💼 Feedback Agent Says:
+# Add agent feedback if present (include ALL of it - valuable context)
+# Display as markdown (not code block) so the agent's voice comes through naturally
+if [[ -n "$AGENT_FEEDBACK_CONTENT" ]]; then
+  FEEDBACK_SECTION+="### 🧑‍💼 Feedback Agent Says:
 
 $AGENT_FEEDBACK_CONTENT
 
 "
-  fi
+fi
 
-  # Build image section - check both explicit --feedback-image AND auto-detected Claude-saved images
-  IMAGE_SECTION=""
-  ALL_FEEDBACK_IMAGES=()
+# Build image section - check both explicit --feedback-image AND auto-detected Claude-saved images
+IMAGE_SECTION=""
+ALL_FEEDBACK_IMAGES=()
 
-  # Add explicit feedback image if set
-  if [[ -n "$FEEDBACK_IMAGE" ]] && [[ -f "$FEEDBACK_IMAGE" ]]; then
-    ALL_FEEDBACK_IMAGES+=("$FEEDBACK_IMAGE")
-  fi
+# Add explicit feedback image if set
+if [[ -n "$FEEDBACK_IMAGE" ]] && [[ -f "$FEEDBACK_IMAGE" ]]; then
+  ALL_FEEDBACK_IMAGES+=("$FEEDBACK_IMAGE")
+fi
 
-  # Auto-detect Claude-saved feedback images in the loop directory
-  # Convention: Claude can save images to .claude/start/<slug>/feedback-image.{png,jpg,jpeg,gif,webp}
-  for ext in png jpg jpeg gif webp; do
-    AUTO_IMAGE="$LOOP_DIR/feedback-image.$ext"
-    if [[ -f "$AUTO_IMAGE" ]]; then
-      # Avoid duplicates
-      if [[ ! " ${ALL_FEEDBACK_IMAGES[*]} " =~ " ${AUTO_IMAGE} " ]]; then
-        ALL_FEEDBACK_IMAGES+=("$AUTO_IMAGE")
-      fi
+# Auto-detect Claude-saved feedback images in the loop directory
+# Convention: Claude can save images to .claude/start/<slug>/feedback-image.{png,jpg,jpeg,gif,webp}
+for ext in png jpg jpeg gif webp; do
+  AUTO_IMAGE="$LOOP_DIR/feedback-image.$ext"
+  if [[ -f "$AUTO_IMAGE" ]]; then
+    # Avoid duplicates
+    if [[ ! " ${ALL_FEEDBACK_IMAGES[*]} " =~ " ${AUTO_IMAGE} " ]]; then
+      ALL_FEEDBACK_IMAGES+=("$AUTO_IMAGE")
     fi
-  done
+  fi
+done
 
-  # Build image section from all found images
-  if [[ ${#ALL_FEEDBACK_IMAGES[@]} -gt 0 ]]; then
-    IMAGE_SECTION="### 🖼️ Visual Feedback
+# Build image section from all found images
+if [[ ${#ALL_FEEDBACK_IMAGES[@]} -gt 0 ]]; then
+  IMAGE_SECTION="### 🖼️ Visual Feedback
 **IMPORTANT:** Read the image file(s) to see the current state:
 "
-    for img in "${ALL_FEEDBACK_IMAGES[@]}"; do
-      IMAGE_SECTION+="\`\`\`
+  for img in "${ALL_FEEDBACK_IMAGES[@]}"; do
+    IMAGE_SECTION+="\`\`\`
 $img
 \`\`\`
 "
-    done
-    IMAGE_SECTION+="Use your Read tool on these image files to view them before making changes.
+  done
+  IMAGE_SECTION+="Use your Read tool on these image files to view them before making changes.
 
 "
-  fi
+fi
 
-  # Build agent feedback instruction if feedback_agent is set
-  AGENT_INSTRUCTION=""
+# Build agent feedback instruction if feedback_agent is set
+AGENT_INSTRUCTION=""
 
-  # If feedback_agent is enabled, require spawning a subagent for feedback
-  if [[ -n "$FEEDBACK_AGENT" ]]; then
-    AGENT_INSTRUCTION="### ⚠️ MANDATORY: Spawn a subagent for feedback
+# If feedback_agent is enabled, require spawning a subagent for feedback
+if [[ -n "$FEEDBACK_AGENT" ]]; then
+  AGENT_INSTRUCTION="### ⚠️ MANDATORY: Spawn a subagent for feedback
 
 **YOU MUST USE THE TASK TOOL TO SPAWN A SUBAGENT BEFORE MAKING ANY CHANGES.**
 
@@ -943,14 +751,14 @@ $img
 4. **Respond 'ok'**
 
 **DO NOT skip the subagent. DO NOT invent agent types.**"
-  else
-    AGENT_INSTRUCTION="### This iteration
+else
+  AGENT_INSTRUCTION="### This iteration
 1. **Pick ONE improvement** toward the goal
 2. **Make the change**
 3. **Respond 'ok'** to end turn"
-  fi
+fi
 
-  REASON_PROMPT="
+REASON_PROMPT="
 ╔══════════════════════════════════════════════════════════════════╗
 ║  🔁 LOOP - ITERATION $ITERATION of $(printf "%-3s" "$(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "∞"; fi)")                                  ║
 ╚══════════════════════════════════════════════════════════════════╝
@@ -977,7 +785,6 @@ $(if [[ -n "$CHANGED_FILES_PREVIEW" ]]; then echo "### Recent changes"; echo '``
 ---
 
 **Make ONE change, then respond \"ok\" to end your turn. Next iteration starts automatically.**"
-fi
 
 # Debug: Write full prompt to log file
 DEBUG_PROMPT_FILE="$LOOP_DIR/debug-prompt.txt"

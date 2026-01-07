@@ -18,8 +18,7 @@ OPTIONS:
   --dir PATH                   Target directory (can specify multiple)
   --file PATH                  Target file (can specify multiple)
   --goal TEXT                  Goal prompt (required)
-  --max-iterations N           Stop after N iterations (default: 3, 0 = unlimited)
-  --inference-mode MODE        "claude" (default) or "external" LLM
+  --max-iterations N           Stop after N iterations (default: 5, 0 = unlimited)
   --eval-cmd CMD               Optional evaluator command (signals only)
   --feedback-cmd CMD           Run after each iteration, output feeds into next iteration
                                (e.g., screenshot tools, gameplay comparators, test runners)
@@ -28,7 +27,6 @@ OPTIONS:
   --feedback-agent             Enable subagent feedback each iteration (default: enabled)
                                Subagent is picked from available Task tool agents
   --no-feedback-agent          Disable subagent spawning
-  --model MODEL                Optional model override (for external LLM mode)
   -h, --help                   Show help
 
 FEEDBACK EXAMPLES:
@@ -58,13 +56,11 @@ HELP_EOF
 TARGET_DIRS=()
 TARGET_FILES=()
 GOAL=""
-MAX_ITERATIONS="3"
-INFERENCE_MODE="claude"
+MAX_ITERATIONS="5"
 EVAL_CMD="null"
 FEEDBACK_CMD="null"
 FEEDBACK_IMAGE="null"
 FEEDBACK_AGENT="auto"  # Default to spawning subagents with unique perspectives
-MODEL="null"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -88,10 +84,6 @@ while [[ $# -gt 0 ]]; do
       MAX_ITERATIONS="${2:-}"
       shift 2
       ;;
-    --inference-mode)
-      INFERENCE_MODE="${2:-claude}"
-      shift 2
-      ;;
     --eval-cmd)
       EVAL_CMD="${2:-}"
       shift 2
@@ -111,10 +103,6 @@ while [[ $# -gt 0 ]]; do
     --no-feedback-agent)
       FEEDBACK_AGENT="null"
       shift 1
-      ;;
-    --model)
-      MODEL="${2:-}"
-      shift 2
       ;;
     *)
       echo "❌ Unknown argument: $1" >&2
@@ -199,13 +187,6 @@ else
   EVAL_CMD_YAML="null"
 fi
 
-if [[ -n "${MODEL:-}" ]] && [[ "$MODEL" != "null" ]]; then
-  MODEL_ESC="$(yaml_escape "$MODEL")"
-  MODEL_YAML="\"$MODEL_ESC\""
-else
-  MODEL_YAML="null"
-fi
-
 if [[ -n "${FEEDBACK_CMD:-}" ]] && [[ "$FEEDBACK_CMD" != "null" ]]; then
   FEEDBACK_CMD_ESC="$(yaml_escape "$FEEDBACK_CMD")"
   FEEDBACK_CMD_YAML="\"$FEEDBACK_CMD_ESC\""
@@ -288,12 +269,10 @@ CLAIM_TOKEN="pending-$(date +%s)-$(openssl rand -hex 4 2>/dev/null || echo $$)"
     done
   fi
   echo "goal: \"$GOAL_ESC\""
-  echo "inference_mode: \"$INFERENCE_MODE\""
   echo "eval_cmd: $EVAL_CMD_YAML"
   echo "feedback_cmd: $FEEDBACK_CMD_YAML"
   echo "feedback_image: $FEEDBACK_IMAGE_YAML"
   echo "feedback_agent: $FEEDBACK_AGENT_YAML"
-  echo "model: $MODEL_YAML"
   echo "started_at: \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\""
   echo "---"
   echo " "
@@ -340,7 +319,6 @@ fi
 
 echo "🎯 Goal:        $GOAL"
 echo "🔄 Iterations:  $(if [[ "$MAX_ITERATIONS" -gt 0 ]]; then echo "1 of $MAX_ITERATIONS"; else echo "unlimited"; fi)"
-echo "🧠 Inference:   $(if [[ "$INFERENCE_MODE" == "external" ]]; then echo "External LLM (gptdiff)"; else echo "Claude Code"; fi)"
 
 if [[ "$EVAL_CMD_YAML" != "null" ]]; then
   echo "📊 Eval cmd:    $EVAL_CMD"
@@ -355,9 +333,6 @@ if [[ "$FEEDBACK_AGENT_YAML" != "null" ]]; then
   echo "🧑‍💼 Subagents:   ENABLED ($FEEDBACK_AGENT) - unique perspective each iteration"
 else
   echo "🧑‍💼 Subagents:   disabled (--no-feedback-agent)"
-fi
-if [[ "$MODEL_YAML" != "null" ]]; then
-  echo "🤖 Model:       $MODEL"
 fi
 
 # Use the already-computed slug

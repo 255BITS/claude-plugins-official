@@ -61,5 +61,4 @@ Based on the output:
   - Build a progress bar: filled dots for completed, empty for remaining
   - Show: iteration X of Y (Z remaining)
   - Show the goal
-  - If background job running: note that external LLM is processing
   - Remind user: `/stop` to cancel the loop

@@ -38,13 +38,13 @@ The user provided a goal directly. **YOU MUST spawn an agent to analyze the proj
 
    **DO NOT skip this step. DO NOT ask questions before spawning the agent.**
 
-2. **After the agent returns**, ask about configuration using AskUserQuestion:
+2. **After the agent returns**, ask about iterations using AskUserQuestion:
 
    Ask in a SINGLE AskUserQuestion call:
 
    **Question: Iterations**
-   - Show what directories/files you found
-   - Options: 3 (quick), 5 (medium), 10 (thorough)
+   - Show what directories/files the agent found
+   - Options: 5 (quick), 15 (medium), 40 (thorough), Other
 
 3. **Run the setup**:
    ```
@@ -82,18 +82,14 @@ Full interactive mode. **YOU MUST spawn an agent to analyze the project.**
 
    Ask these in a SINGLE AskUserQuestion call with multiple questions:
 
-   **Question 1: Target directories/files**
-   - Pre-select the agent's suggested targets as defaults
-   - Offer other directories as additional options
-
-   **Question 2: Goal**
+   **Question 1: Goal**
    - Use the agent's suggested goals as the main options
    - Be specific: if you see enemies.ts with 3 enemies, suggest "Add 2-3 new enemy types"
    - Be directional: "Add more X", "Improve Y", "Expand Z", "Polish W"
    - Reference actual code: "Add more items like {example}", "Balance the {thing you saw}"
 
-   **Question 3: Iterations**
-   - Options: 3 (quick), 5 (medium), 10 (thorough)
+   **Question 2: Iterations**
+   - Options: 5 (quick), 15 (medium), 40 (thorough), Other
 
 3. **Run the setup**:
    ```

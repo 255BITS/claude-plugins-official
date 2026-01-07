@@ -1,6 +1,6 @@
 # GPTDiff Plugin — Agent Loops for Iterative Improvement
 
-This plugin runs **iterative improvement loops** using GPTDiff — not doing a task once, but doing it *many times* to converge on a better result.
+This plugin runs **iterative improvement loops** using Claude Code — not doing a task once, but doing it *many times* to converge on a better result.
 
 ## Commands
 
@@ -20,13 +20,13 @@ This plugin runs **iterative improvement loops** using GPTDiff — not doing a t
 ### Multiple targets
 
 ```bash
-/start --dir src --dir lib --goal "Refactor shared code" --max-iterations 3
+/start --dir src --dir lib --goal "Refactor shared code" --max-iterations 5
 ```
 
 ### Specific files
 
 ```bash
-/start --file src/main.ts --file src/utils.ts --goal "Optimize these files" --max-iterations 3
+/start --file src/main.ts --file src/utils.ts --goal "Optimize these files" --max-iterations 5
 ```
 
 ## Options
@@ -35,12 +35,12 @@ This plugin runs **iterative improvement loops** using GPTDiff — not doing a t
 --dir PATH              Target directory (can specify multiple)
 --file PATH             Target file (can specify multiple)
 --goal TEXT             Goal prompt (required)
---max-iterations N      Stop after N iterations (default: 3, 0 = unlimited)
---inference-mode MODE   "claude" (default) or "external" LLM
+--max-iterations N      Stop after N iterations (default: 5, 0 = unlimited)
 --eval-cmd CMD          Optional evaluator command (signals only)
 --feedback-cmd CMD      Run after each iteration, output feeds into next
 --feedback-image PATH   Image file to include in each iteration's context
---feedback-agent AGENT  Agent to review changes each iteration
+--feedback-agent        Enable subagent feedback (default: enabled)
+--no-feedback-agent     Disable subagent feedback
 ```
 
 ## Feedback options
@@ -62,31 +62,16 @@ This plugin runs **iterative improvement loops** using GPTDiff — not doing a t
   --max-iterations 5
 ```
 
-### Agent-based feedback
+### Agent-based feedback (default)
 
-Use `--feedback-agent` to have Claude spawn an agent to review changes each iteration.
-
-```bash
-# Claude picks an appropriate agent each iteration
-/start --dir src --goal "Improve code quality" \
-  --feedback-agent auto --max-iterations 5
-```
-
-With `--feedback-agent auto`, Claude picks an appropriate agent from its available agents each iteration.
-
-## Inference modes
-
-### Claude Code mode (default)
-
-When `GPTDIFF_LLM_API_KEY` is **not set**, Claude Code makes improvements directly using its Edit/Write tools.
-
-### External LLM mode
-
-When `GPTDIFF_LLM_API_KEY` **is set**, the plugin uses gptdiff's Python API to call an external LLM:
+Each iteration, Claude spawns a subagent from its available agents to provide feedback on the changes.
 
 ```bash
-export GPTDIFF_LLM_API_KEY="your-api-key"
-export GPTDIFF_MODEL="deepseek-reasoner"  # optional
+# Subagent feedback is enabled by default
+/start --dir src --goal "Improve code quality" --max-iterations 5
+
+# Disable subagent feedback
+/start --dir src --goal "Improve code quality" --no-feedback-agent --max-iterations 5
 ```
 
 ## Where state and logs are stored

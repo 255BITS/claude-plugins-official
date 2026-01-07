@@ -8,7 +8,7 @@ Run iterative improvement loops on a directory:
 
 - Pick a **target directory** (e.g. `src/`)
 - Give a **goal**
-- Iterate N times (default: 3)
+- Iterate N times (default: 5)
 - Optionally run a **feedback command** between iterations
 - Review the final diffs
 
@@ -17,22 +17,20 @@ Run iterative improvement loops on a directory:
 ### /start
 
 Start the loop. Run without arguments for **interactive setup** that asks about:
-- Target directories/files
 - Goal (with smart suggestions based on code analysis)
-- Number of iterations (3/5/10)
-- Agent feedback (auto, specific agent from /agents, or none)
+- Number of iterations (5/15/40)
+- Agent feedback (enabled by default)
 
 **Options:**
 - `--dir PATH` - Target directory (can specify multiple)
 - `--file PATH` - Target file (can specify multiple)
 - `--goal TEXT` - Goal prompt (required)
-- `--max-iterations N` - Stop after N iterations (default: 3)
+- `--max-iterations N` - Stop after N iterations (default: 5)
 - `--feedback-cmd CMD` - Run after each iteration, output feeds into next
 - `--feedback-image PATH` - Image file to include in each iteration
-- `--feedback-agent AGENT` - Subagent persona (default: auto - spawns unique perspectives each iteration)
+- `--feedback-agent` - Enable subagent feedback (default: enabled)
 - `--no-feedback-agent` - Disable subagent spawning (not recommended)
 - `--eval-cmd CMD` - Optional evaluator command (signals only)
-- `--inference-mode MODE` - "claude" (default) or "external" LLM
 
 **Examples:**
 ```
@@ -41,7 +39,7 @@ Start the loop. Run without arguments for **interactive setup** that asks about:
 
 # With feedback command (test runners, etc.)
 /start --dir src --goal "Fix failing tests" \
-  --feedback-cmd "npm test 2>&1 | tail -50" --max-iterations 3
+  --feedback-cmd "npm test 2>&1 | tail -50" --max-iterations 5
 
 # Visual feedback with image
 /start --dir game/ui --goal "Improve UI" \
@@ -101,23 +99,21 @@ Claude can save images to a known path, and the loop will automatically include 
 
 - **Path**: `.claude/start/<slug>/feedback-image.png` (or .jpg/.gif/.webp)
 - **Auto-detection**: Always enabled - images found here are included in next iteration
-- **Works with both modes**: Claude Code and external LLMs
 
 This lets Claude decide what feedback to gather without pre-configuring commands.
 
 ## Subagent Perspectives (enabled by default)
 
-Each iteration spawns a **subagent with a unique creative persona** to provide fresh perspectives. This prevents the main agent from getting stuck in local optima.
+Each iteration spawns a **subagent** to provide fresh perspectives. This prevents the main agent from getting stuck in local optima.
 
 **How it works:**
-1. Main agent spawns a subagent with a creative persona (e.g., "grumpy code reviewer", "impatient user", "security paranoid")
+1. Main agent spawns a subagent from its available agents
 2. Subagent analyzes the code and recommends ONE specific improvement
 3. Main agent implements the recommendation
-4. Next iteration gets a different persona
+4. Next iteration continues the process
 
 **Options:**
-- `--feedback-agent auto` (default) - Claude picks creative personas each iteration
-- `--feedback-agent "grumpy reviewer"` - Use a specific persona
+- `--feedback-agent` (default) - Claude picks an appropriate subagent each iteration
 - `--no-feedback-agent` - Disable (not recommended - loses diversity of perspectives)
 
 ## Logs
@@ -128,6 +124,6 @@ Each loop has its own directory (multiple loops can run concurrently):
 - Logs: `.claude/start/<target-slug>/`
   - `eval.log` - Evaluator output
   - `feedback.log` - Feedback command output
-  - `agent-feedback.txt` - Expert agent feedback
-  - `gptdiff.log` - LLM inference log
+  - `agent-feedback.txt` - Subagent feedback
+  - `gptdiff.log` - Inference log
   - `diffstat.txt` - Changes summary
