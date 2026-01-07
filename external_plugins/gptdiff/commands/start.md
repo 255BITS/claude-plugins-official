@@ -1,10 +1,10 @@
 ---
-description: "Start a GPTDiff-powered agent loop on directories or files"
+description: "Start an agent loop on directories or files"
 argument-hint: "<goal> | --dir PATH --goal '...' [--feedback-cmd CMD] [--max-iterations N]"
 allowed-tools: ["Bash", "Glob", "Read", "AskUserQuestion", "Task"]
 ---
 
-# GPTDiff Loop
+# Agent Loop
 
 ## If $ARGUMENTS contains `--dir` or `--file` flags:
 
@@ -40,22 +40,17 @@ The user provided a goal directly. **YOU MUST spawn an agent to analyze the proj
 
 2. **After the agent returns**, ask about configuration using AskUserQuestion:
 
-   Ask these in a SINGLE AskUserQuestion call with multiple questions:
+   Ask in a SINGLE AskUserQuestion call:
 
-   **Question 1: Iterations**
+   **Question: Iterations**
    - Show what directories/files you found
    - Options: 3 (quick), 5 (medium), 10 (thorough)
 
-   **Question 2: Agent Feedback**
-   - List 2-3 of your available agents that seem most relevant to the goal
-   - **Auto**: Claude picks an appropriate agent each iteration
-   - **None**: No agent feedback between iterations
-
-4. **Run the setup**:
+3. **Run the setup**:
    ```
-   ~/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] --goal "THE_GOAL_FROM_ARGUMENTS" --max-iterations N --feedback-agent AGENT
+   ~/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR [--dir DIR2] --goal "THE_GOAL_FROM_ARGUMENTS" --max-iterations N
    ```
-   Where AGENT is "auto" or omitted for none.
+   Each iteration automatically spawns a subagent from your available agents for feedback.
 
 ## If NO arguments provided (empty $ARGUMENTS):
 
@@ -100,16 +95,11 @@ Full interactive mode. **YOU MUST spawn an agent to analyze the project.**
    **Question 3: Iterations**
    - Options: 3 (quick), 5 (medium), 10 (thorough)
 
-   **Question 4: Agent Feedback**
-   - List 2-3 of your available agents that seem most relevant to the goal
-   - **Auto**: Claude picks an appropriate agent each iteration
-   - **None**: No agent feedback between iterations
-
-4. **Run the setup**:
+3. **Run the setup**:
    ```
-   ~/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N --feedback-agent AGENT
+   ~/dev/claude-plugins-official/external_plugins/gptdiff/scripts/setup-gptdiff-start.sh --dir DIR --goal "GOAL" --max-iterations N
    ```
-   Where AGENT is "auto" or omitted for none.
+   Each iteration automatically spawns a subagent from your available agents for feedback.
 
 ---
 

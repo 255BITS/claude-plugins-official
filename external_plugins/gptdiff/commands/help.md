@@ -1,8 +1,8 @@
 ---
-description: "Explain GPTDiff agent loop plugin and available commands"
+description: "Explain agent loop plugin and available commands"
 ---
 
-# GPTDiff Loop Plugin
+# Agent Loop Plugin
 
 Run iterative improvement loops on a directory:
 
@@ -29,7 +29,8 @@ Start the loop. Run without arguments for **interactive setup** that asks about:
 - `--max-iterations N` - Stop after N iterations (default: 3)
 - `--feedback-cmd CMD` - Run after each iteration, output feeds into next
 - `--feedback-image PATH` - Image file to include in each iteration
-- `--feedback-agent AGENT` - Spawn expert agent to review changes ("auto" lets Claude decide, or pass a custom description)
+- `--feedback-agent AGENT` - Subagent persona (default: auto - spawns unique perspectives each iteration)
+- `--no-feedback-agent` - Disable subagent spawning (not recommended)
 - `--eval-cmd CMD` - Optional evaluator command (signals only)
 - `--inference-mode MODE` - "claude" (default) or "external" LLM
 
@@ -47,9 +48,11 @@ Start the loop. Run without arguments for **interactive setup** that asks about:
   --feedback-cmd "screenshot-tool /tmp/ui.png" \
   --feedback-image /tmp/ui.png --max-iterations 5
 
-# Agent feedback (Claude picks an appropriate agent each iteration)
-/start --dir src --goal "Improve code quality" \
-  --feedback-agent auto --max-iterations 5
+# Subagent spawning is enabled by default (no flag needed)
+/start --dir src --goal "Improve code quality" --max-iterations 5
+
+# To disable subagent spawning (not recommended)
+/start --dir src --goal "Quick fix" --no-feedback-agent
 ```
 
 ### /status
@@ -84,16 +87,20 @@ Claude can save images to a known path, and the loop will automatically include 
 
 This lets Claude decide what feedback to gather without pre-configuring commands.
 
-## Expert Agent Feedback
+## Subagent Perspectives (enabled by default)
 
-Use `--feedback-agent` to spawn an agent to review changes each iteration.
+Each iteration spawns a **subagent with a unique creative persona** to provide fresh perspectives. This prevents the main agent from getting stuck in local optima.
 
-- **auto**: Claude picks an appropriate agent each iteration based on the goal and changes made
+**How it works:**
+1. Main agent spawns a subagent with a creative persona (e.g., "grumpy code reviewer", "impatient user", "security paranoid")
+2. Subagent analyzes the code and recommends ONE specific improvement
+3. Main agent implements the recommendation
+4. Next iteration gets a different persona
 
-Examples:
-```
---feedback-agent auto
-```
+**Options:**
+- `--feedback-agent auto` (default) - Claude picks creative personas each iteration
+- `--feedback-agent "grumpy reviewer"` - Use a specific persona
+- `--no-feedback-agent` - Disable (not recommended - loses diversity of perspectives)
 
 ## Logs
 

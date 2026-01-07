@@ -8,7 +8,7 @@ set -euo pipefail
 
 show_help() {
   cat << 'HELP_EOF'
-GPTDiff Loop (Agent Loop)
+Agent Loop
 
 USAGE:
   /start --dir PATH --goal "..." [OPTIONS]
@@ -17,7 +17,7 @@ USAGE:
 OPTIONS:
   --dir PATH                   Target directory (can specify multiple)
   --file PATH                  Target file (can specify multiple)
-  --goal TEXT                  Goal prompt for GPTDiff (required)
+  --goal TEXT                  Goal prompt (required)
   --max-iterations N           Stop after N iterations (default: 3, 0 = unlimited)
   --inference-mode MODE        "claude" (default) or "external" LLM
   --eval-cmd CMD               Optional evaluator command (signals only)
@@ -25,10 +25,10 @@ OPTIONS:
                                (e.g., screenshot tools, gameplay comparators, test runners)
   --feedback-image PATH        Image file to include in each iteration's context
                                (e.g., screenshot saved by feedback-cmd or external tool)
-  --feedback-agent AGENT       Spawn a specialized agent to review changes each iteration
-                               Use "auto" (Claude decides) or a custom description
-                               (e.g., "security expert", "game balance reviewer")
-  --model MODEL                Optional GPTDiff model override
+  --feedback-agent             Enable subagent feedback each iteration (default: enabled)
+                               Subagent is picked from available Task tool agents
+  --no-feedback-agent          Disable subagent spawning
+  --model MODEL                Optional model override (for external LLM mode)
   -h, --help                   Show help
 
 FEEDBACK EXAMPLES:
@@ -37,22 +37,9 @@ FEEDBACK EXAMPLES:
     --feedback-cmd "screenshot-tool --output /tmp/ui.png" \
     --feedback-image /tmp/ui.png
 
-  # Gameplay comparator with visual diff
-  /start --dir game/enemies --goal "Balance enemy difficulty" \
-    --feedback-cmd "python3 tools/run_simulation.py --screenshot /tmp/sim.png" \
-    --feedback-image /tmp/sim.png
-
   # Test runner feedback (text only)
   /start --dir src --goal "Fix failing tests" \
     --feedback-cmd "npm test 2>&1 | tail -50"
-
-  # Agent-based feedback (Claude decides what expert to spawn)
-  /start --dir game/ui --goal "Improve UI aesthetics" \
-    --feedback-agent auto
-
-  # Custom agent description
-  /start --dir game/enemies --goal "Balance enemy difficulty" \
-    --feedback-agent "game balance expert"
 
 EXAMPLES:
   /start --dir src \
@@ -76,7 +63,7 @@ INFERENCE_MODE="claude"
 EVAL_CMD="null"
 FEEDBACK_CMD="null"
 FEEDBACK_IMAGE="null"
-FEEDBACK_AGENT="null"
+FEEDBACK_AGENT="auto"  # Default to spawning subagents with unique perspectives
 MODEL="null"
 
 while [[ $# -gt 0 ]]; do
@@ -118,8 +105,12 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --feedback-agent)
-      FEEDBACK_AGENT="${2:-}"
-      shift 2
+      FEEDBACK_AGENT="auto"
+      shift 1
+      ;;
+    --no-feedback-agent)
+      FEEDBACK_AGENT="null"
+      shift 1
       ;;
     --model)
       MODEL="${2:-}"
@@ -263,16 +254,13 @@ else
   TARGET_FILES_YAML="[]"
 fi
 
-# Generate a unique session ID to identify this Claude instance
-# ALWAYS create a new session ID when starting a loop - this prevents
-# new Claude sessions from accidentally claiming old loops
-GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-GIT_ROOT_HASH="$(echo "$GIT_ROOT" | md5sum | cut -c1-12)"
-SESSION_FILE="/tmp/claude-gptdiff-session-$GIT_ROOT_HASH"
+# Session management: The stop hook gets the real session_id from Claude Code's hook input.
+# The setup script writes a "pending" claim token that the stop hook will upgrade
+# to the real session_id on first invocation.
 
-# Always generate fresh session ID for new loops
-SESSION_ID="$(date +%s)-$(openssl rand -hex 4 2>/dev/null || echo $$)-$$"
-echo "$SESSION_ID" > "$SESSION_FILE"
+# Generate a claim token for this loop
+# The stop hook will replace this with the real session_id from hook input
+CLAIM_TOKEN="pending-$(date +%s)-$(openssl rand -hex 4 2>/dev/null || echo $$)"
 
 # Create state file
 {
@@ -280,7 +268,7 @@ echo "$SESSION_ID" > "$SESSION_FILE"
   echo "active: true"
   echo "iteration: 1"
   echo "max_iterations: $MAX_ITERATIONS"
-  echo "session_id: \"$SESSION_ID\""
+  echo "claim_token: \"$CLAIM_TOKEN\""
   echo -n "target_dirs:"
   if [[ ${#TARGET_DIRS[@]} -eq 0 ]]; then
     echo " []"
@@ -309,21 +297,20 @@ echo "$SESSION_ID" > "$SESSION_FILE"
   echo "started_at: \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\""
   echo "---"
   echo " "
-  echo "GPTDiff loop is active."
+  echo "Loop is active."
   echo " "
   echo "Please reply with a short progress note (or just \`ok\`) and then stop."
   echo "To cancel: /stop"
 } > "$LOOP_DIR/state.local.md"
 
-# Write lock file with session ID to claim ownership of this loop
-# Other Claude instances will check this before processing the loop
-echo "$SESSION_ID" > "$LOOP_DIR/.lock-owner"
+# Write lock file with claim token - stop hook will upgrade to real session_id
+echo "$CLAIM_TOKEN" > "$LOOP_DIR/.lock-owner"
 echo "$(date +%s)" > "$LOOP_DIR/.last-activity"
 
 cat <<EOF
 
 ╔══════════════════════════════════════════════════════════════════╗
-║                    🔁 GPTDIFF LOOP ACTIVATED                     ║
+║                    🔁 LOOP ACTIVATED                             ║
 ╚══════════════════════════════════════════════════════════════════╝
 
 EOF
@@ -365,7 +352,9 @@ if [[ "$FEEDBACK_IMAGE_YAML" != "null" ]]; then
   echo "🖼️  Image:       $FEEDBACK_IMAGE"
 fi
 if [[ "$FEEDBACK_AGENT_YAML" != "null" ]]; then
-  echo "🧑‍💼 Agent:       $FEEDBACK_AGENT"
+  echo "🧑‍💼 Subagents:   ENABLED ($FEEDBACK_AGENT) - unique perspective each iteration"
+else
+  echo "🧑‍💼 Subagents:   disabled (--no-feedback-agent)"
 fi
 if [[ "$MODEL_YAML" != "null" ]]; then
   echo "🤖 Model:       $MODEL"

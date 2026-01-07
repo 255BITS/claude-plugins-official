@@ -23,6 +23,12 @@ _HOOK_INPUT="$(cat || true)"
 
 ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
+# Parse session_id from hook input - this is the authoritative session identifier
+HOOK_SESSION_ID=""
+if command -v jq >/dev/null 2>&1 && [[ -n "$_HOOK_INPUT" ]]; then
+  HOOK_SESSION_ID="$(echo "$_HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)"
+fi
+
 # Find all active loop state files
 # Each loop has its own state file: .claude/start/{slug}/state.local.md
 LOOP_STATE_DIR="$ROOT_DIR/.claude/start"
@@ -42,23 +48,14 @@ fi
 # Each loop has a .lock-owner file with the session ID that owns it
 # We also track .last-activity to detect stale locks
 
-# Get our session ID from the temp file (created by setup script)
-# This ensures setup and stop hook use the same session ID
-GIT_ROOT_HASH="$(echo "$ROOT_DIR" | md5sum | cut -c1-12)"
-SESSION_FILE="/tmp/claude-gptdiff-session-$GIT_ROOT_HASH"
-
+# Use session_id from hook input - this is the authoritative session identifier
 # Debug logging
 DEBUG_LOG="$ROOT_DIR/.claude/gptdiff-debug.log"
 mkdir -p "$(dirname "$DEBUG_LOG")"
 {
   echo "=== Stop hook invoked: $(date) ==="
   echo "ROOT_DIR: $ROOT_DIR"
-  echo "GIT_ROOT_HASH: $GIT_ROOT_HASH"
-  echo "SESSION_FILE: $SESSION_FILE"
-  echo "SESSION_FILE exists: $(test -f "$SESSION_FILE" && echo yes || echo no)"
-  if [[ -f "$SESSION_FILE" ]]; then
-    echo "SESSION_FILE content: $(cat "$SESSION_FILE")"
-  fi
+  echo "HOOK_SESSION_ID: $HOOK_SESSION_ID"
   echo "STATE_FILES found: ${#STATE_FILES[@]}"
   for sf in "${STATE_FILES[@]}"; do
     echo "  - $sf"
@@ -66,12 +63,12 @@ mkdir -p "$(dirname "$DEBUG_LOG")"
   done
 } >> "$DEBUG_LOG"
 
-if [[ -f "$SESSION_FILE" ]]; then
-  OUR_SESSION_ID="$(cat "$SESSION_FILE")"
+# Use hook-provided session_id (always available in Claude Code hooks)
+if [[ -n "$HOOK_SESSION_ID" ]]; then
+  OUR_SESSION_ID="$HOOK_SESSION_ID"
 else
-  # No session file - this instance didn't start any loops
-  # Generate a temporary ID (won't match any existing loops)
-  OUR_SESSION_ID="no-session-$(date +%s)-$$"
+  # Fallback for edge cases (shouldn't happen in normal operation)
+  OUR_SESSION_ID="unknown-session-$(date +%s)-$$"
 fi
 
 echo "OUR_SESSION_ID: $OUR_SESSION_ID" >> "$DEBUG_LOG"
@@ -103,6 +100,33 @@ find_claimable_loop() {
       echo "  lock_owner content: '$lock_owner'" >> "$DEBUG_LOG"
       echo "  OUR_SESSION_ID: '$OUR_SESSION_ID'" >> "$DEBUG_LOG"
       echo "  match: $(test "$lock_owner" == "$OUR_SESSION_ID" && echo yes || echo no)" >> "$DEBUG_LOG"
+
+      # Check for pending claim token (newly started loop, not yet claimed by stop hook)
+      # Pending tokens look like: pending-1234567890-abc123
+      # Only claim if very recent (< 30 seconds) to avoid cross-session races
+      if [[ "$lock_owner" == pending-* ]]; then
+        if [[ -f "$last_activity_file" ]]; then
+          local pending_age=$((now - $(cat "$last_activity_file" 2>/dev/null || echo 0)))
+          if [[ $pending_age -lt 30 ]]; then
+            # This is a freshly started loop - claim it with our real session_id
+            echo "  -> CLAIMING (pending claim token ${pending_age}s old, upgrading to session_id)" >> "$DEBUG_LOG"
+            echo "$OUR_SESSION_ID" > "$lock_owner_file"
+            echo "$now" > "$last_activity_file"
+            echo "$state_file"
+            return 0
+          else
+            echo "  -> SKIP (pending token too old: ${pending_age}s, may belong to another session)" >> "$DEBUG_LOG"
+            continue
+          fi
+        else
+          # No activity file - claim it
+          echo "  -> CLAIMING (pending claim token, no activity file)" >> "$DEBUG_LOG"
+          echo "$OUR_SESSION_ID" > "$lock_owner_file"
+          echo "$now" > "$last_activity_file"
+          echo "$state_file"
+          return 0
+        fi
+      fi
 
       # If we own this lock, verify the loop is actually active
       # (last-activity must be recent - this prevents stale session files from matching)
@@ -153,32 +177,12 @@ find_claimable_loop() {
         return 0
       fi
     else
-      # No lock owner file - this is an orphan loop (from before multi-instance support)
-      # Check if the state file has a session_id that matches ours
-      local state_session_id
-      state_session_id="$(sed -n 's/^session_id: "\(.*\)"$/\1/p' "$state_file" 2>/dev/null | head -1)"
-
-      if [[ -n "$state_session_id" ]]; then
-        # State file has session_id but no lock file - lock file was deleted or lost
-        # Only claim if session_id matches (same session that started it)
-        if [[ "$state_session_id" == "$OUR_SESSION_ID" ]]; then
-          echo "ℹ️  Reclaiming loop $(basename "$loop_dir") (session ID matches)" >&2
-          echo "$OUR_SESSION_ID" > "$lock_owner_file"
-          echo "$now" > "$last_activity_file"
-          echo "$state_file"
-          return 0
-        else
-          # Different session started this loop - don't claim it
-          echo "ℹ️  Loop $(basename "$loop_dir") was started by a different session (no lock file)" >&2
-          continue
-        fi
-      else
-        # Pre-update loop (no session_id in state file) - DON'T auto-claim
-        # User should explicitly clean up old loops with /gptdiff:stop
-        echo "⚠️  Found orphan loop $(basename "$loop_dir") from before multi-instance update" >&2
-        echo "   Use /gptdiff:stop to clean up old loops, then start a new one" >&2
-        continue
-      fi
+      # No lock owner file - orphan loop, claim it
+      echo "  -> CLAIMING (no lock file, orphan loop)" >> "$DEBUG_LOG"
+      echo "$OUR_SESSION_ID" > "$lock_owner_file"
+      echo "$now" > "$last_activity_file"
+      echo "$state_file"
+      return 0
     fi
   done
 
@@ -192,7 +196,7 @@ STATE_FILE=""
 if ! STATE_FILE="$(find_claimable_loop)"; then
   # All loops are owned by other instances
   if [[ ${#STATE_FILES[@]} -gt 0 ]]; then
-    echo "ℹ️  All ${#STATE_FILES[@]} GPTDiff loop(s) are owned by other Claude instances." >&2
+    echo "ℹ️  All ${#STATE_FILES[@]} loop(s) are owned by other Claude instances." >&2
     echo "   Use /gptdiff:stop to force-cancel all loops, or wait for them to complete." >&2
   fi
   exit 0
@@ -211,7 +215,7 @@ echo "$(date +%s)" > "$LOOP_DIR_FOR_LOCK/.last-activity"
 
 # If multiple loops are active, warn the user
 if [[ ${#STATE_FILES[@]} -gt 1 ]]; then
-  echo "⚠️  Multiple GPTDiff loops active (${#STATE_FILES[@]} loops). Processing owned loop: $(basename "$LOOP_DIR_FOR_LOCK")" >&2
+  echo "⚠️  Multiple loops active (${#STATE_FILES[@]} loops). Processing owned loop: $(basename "$LOOP_DIR_FOR_LOCK")" >&2
   echo "   All active loops:" >&2
   for sf in "${STATE_FILES[@]}"; do
     local_loop_dir="$(dirname "$sf")"
@@ -225,14 +229,14 @@ if [[ ${#STATE_FILES[@]} -gt 1 ]]; then
 fi
 
 if ! command -v jq >/dev/null 2>&1; then
-  echo "⚠️  GPTDiff loop: 'jq' is required for stop hook JSON responses. Stopping loop." >&2
+  echo "⚠️  Loop error: 'jq' is required for stop hook JSON responses. Stopping loop." >&2
   rm -f "$STATE_FILE"
   exit 0
 fi
 
 # Check that Python and gptdiff package are available (for file loading utilities)
 if ! python3 -c "import gptdiff" 2>/dev/null; then
-  echo "⚠️  GPTDiff loop: 'gptdiff' Python package not found. Install with: pip install gptdiff" >&2
+  echo "⚠️  Loop error: 'gptdiff' Python package not found. Install with: pip install gptdiff" >&2
   rm -f "$STATE_FILE"
   exit 0
 fi
@@ -327,19 +331,19 @@ if [[ "${INFERENCE_MODE_RAW:-}" == "null" ]] || [[ -z "${INFERENCE_MODE:-}" ]]; 
 
 # Validate numeric fields
 if [[ ! "$ITERATION" =~ ^[0-9]+$ ]]; then
-  echo "⚠️  GPTDiff loop: State file corrupted (iteration is not a number)." >&2
+  echo "⚠️  Loop error: State file corrupted (iteration is not a number)." >&2
   rm -f "$STATE_FILE"
   exit 0
 fi
 
 if [[ ! "$MAX_ITERATIONS" =~ ^[0-9]+$ ]]; then
-  echo "⚠️  GPTDiff loop: State file corrupted (max_iterations is not a number)." >&2
+  echo "⚠️  Loop error: State file corrupted (max_iterations is not a number)." >&2
   rm -f "$STATE_FILE"
   exit 0
 fi
 
 if [[ -z "${TARGET_DIRS_STR:-}" ]] && [[ -z "${TARGET_FILES_STR:-}" ]]; then
-  echo "⚠️  GPTDiff loop: State file corrupted (no target_dirs or target_files)." >&2
+  echo "⚠️  Loop error: State file corrupted (no target_dirs or target_files)." >&2
   rm -f "$STATE_FILE"
   exit 0
 fi
@@ -349,7 +353,7 @@ while IFS= read -r dir; do
   [[ -z "$dir" ]] && continue
   TARGET_ABS="$ROOT_DIR/$dir"
   if [[ ! -d "$TARGET_ABS" ]]; then
-    echo "⚠️  GPTDiff loop: target directory does not exist: $TARGET_ABS" >&2
+    echo "⚠️  Loop error: target directory does not exist: $TARGET_ABS" >&2
     rm -f "$STATE_FILE"
     exit 0
   fi
@@ -360,7 +364,7 @@ while IFS= read -r file; do
   [[ -z "$file" ]] && continue
   TARGET_ABS="$ROOT_DIR/$file"
   if [[ ! -f "$TARGET_ABS" ]]; then
-    echo "⚠️  GPTDiff loop: target file does not exist: $TARGET_ABS" >&2
+    echo "⚠️  Loop error: target file does not exist: $TARGET_ABS" >&2
     rm -f "$STATE_FILE"
     exit 0
   fi
@@ -385,7 +389,7 @@ TARGET_SLUG="$(basename "$LOOP_DIR")"
 
 # If max iterations exceeded, show summary and clean up
 if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -gt $MAX_ITERATIONS ]]; then
-  echo "🛑 GPTDiff loop complete: $MAX_ITERATIONS iterations finished." >&2
+  echo "🛑 Loop complete: $MAX_ITERATIONS iterations finished." >&2
 
   # Get git diff summary for the prompt
   FINAL_DIFFSTAT=""
@@ -403,7 +407,7 @@ if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -gt $MAX_ITERATIONS ]]; then
   # Return summary prompt
   SUMMARY_PROMPT="
 ╔══════════════════════════════════════════════════════════════════╗
-║  ✅ GPTDIFF LOOP COMPLETE - $MAX_ITERATIONS iterations                       ║
+║  ✅ LOOP COMPLETE - $MAX_ITERATIONS iterations                               ║
 ╚══════════════════════════════════════════════════════════════════╝
 
 **Goal:** $GOAL
@@ -428,7 +432,7 @@ $FINAL_LOG
 
   jq -n \
     --arg prompt "$SUMMARY_PROMPT" \
-    --arg msg "✅ GPTDiff loop complete ($MAX_ITERATIONS iterations). Summarizing changes." \
+    --arg msg "✅ Loop complete ($MAX_ITERATIONS iterations). Summarizing changes." \
     '{
       "decision": "block",
       "reason": $prompt,
@@ -440,11 +444,87 @@ fi
 # Extract base prompt (everything after the closing ---)
 BASE_PROMPT="$(awk '/^---$/{i++; next} i>=2' "$STATE_FILE")"
 if [[ -z "$BASE_PROMPT" ]]; then
-  BASE_PROMPT="Continue the GPTDiff loop. Reply with a short progress note, then stop."
+  BASE_PROMPT="Continue the loop. Reply with a short progress note, then stop."
 fi
 
 # LOOP_DIR was already set above from the state file's parent directory
 mkdir -p "$LOOP_DIR"
+
+# ============================================================
+# AUTO-COMMIT: Commit changes from previous iteration (if any)
+# ============================================================
+# Only attempt commit on iteration 2+ (iteration 1 has no previous changes)
+# Only commit if there are staged or unstaged changes in target dirs/files
+if [[ $ITERATION -gt 1 ]] && git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  # Check if there are any changes (staged or unstaged)
+  HAS_CHANGES="false"
+
+  # Build list of targets for git add
+  GIT_TARGETS=()
+  while IFS= read -r dir; do
+    [[ -z "$dir" ]] && continue
+    GIT_TARGETS+=("$ROOT_DIR/$dir")
+  done <<< "$TARGET_DIRS_STR"
+  while IFS= read -r file; do
+    [[ -z "$file" ]] && continue
+    GIT_TARGETS+=("$ROOT_DIR/$file")
+  done <<< "$TARGET_FILES_STR"
+
+  # Check for changes in target paths
+  for target in "${GIT_TARGETS[@]}"; do
+    if [[ -d "$target" ]] || [[ -f "$target" ]]; then
+      # Check for unstaged changes
+      if ! git -C "$ROOT_DIR" diff --quiet -- "$target" 2>/dev/null; then
+        HAS_CHANGES="true"
+        break
+      fi
+      # Check for staged changes
+      if ! git -C "$ROOT_DIR" diff --cached --quiet -- "$target" 2>/dev/null; then
+        HAS_CHANGES="true"
+        break
+      fi
+      # Check for untracked files
+      if [[ -d "$target" ]]; then
+        UNTRACKED="$(git -C "$ROOT_DIR" ls-files --others --exclude-standard -- "$target" 2>/dev/null | head -1)"
+        if [[ -n "$UNTRACKED" ]]; then
+          HAS_CHANGES="true"
+          break
+        fi
+      fi
+    fi
+  done
+
+  if [[ "$HAS_CHANGES" == "true" ]]; then
+    PREV_ITER=$((ITERATION - 1))
+
+    # Stage changes in target directories/files
+    for target in "${GIT_TARGETS[@]}"; do
+      git -C "$ROOT_DIR" add "$target" 2>/dev/null || true
+    done
+
+    # Check if staging resulted in anything to commit (excludes whitespace-only changes)
+    if ! git -C "$ROOT_DIR" diff --cached --quiet 2>/dev/null; then
+      # Get a brief summary of what changed
+      CHANGED_COUNT="$(git -C "$ROOT_DIR" diff --cached --stat --stat-count=1 2>/dev/null | grep -oP '\d+ file' | grep -oP '\d+' || echo "?")"
+
+      # Truncate goal for commit message (first 60 chars)
+      GOAL_SHORT="${GOAL:0:60}"
+      [[ ${#GOAL} -gt 60 ]] && GOAL_SHORT="${GOAL_SHORT}..."
+
+      # Create commit
+      COMMIT_MSG="[loop iter $PREV_ITER] $GOAL_SHORT
+
+Automated commit from gptdiff loop iteration $PREV_ITER of $MAX_ITERATIONS.
+Target: $TARGETS_DISPLAY
+
+🤖 Generated with gptdiff loop"
+
+      if git -C "$ROOT_DIR" commit -m "$COMMIT_MSG" >/dev/null 2>&1; then
+        echo "✅ Committed iteration $PREV_ITER changes ($CHANGED_COUNT files)" >&2
+      fi
+    fi
+  fi
+fi
 
 EVAL_LOG="$LOOP_DIR/eval.log"
 FEEDBACK_LOG="$LOOP_DIR/feedback.log"
@@ -529,7 +609,7 @@ if [[ "$INFERENCE_MODE" == "external" ]]; then
   if [[ -n "${GPTDIFF_LLM_API_KEY:-}" ]]; then
     USE_EXTERNAL_LLM="true"
   else
-    echo "⚠️  GPTDiff loop: External LLM mode requested but GPTDIFF_LLM_API_KEY not set. Falling back to Claude Code." >&2
+    echo "⚠️  Loop: External LLM mode requested but GPTDIFF_LLM_API_KEY not set. Falling back to Claude Code." >&2
   fi
 fi
 
@@ -713,12 +793,12 @@ fi
 
 # If next iteration would exceed max, stop on next stop attempt
 if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $NEXT_ITERATION -gt $MAX_ITERATIONS ]]; then
-  SYSTEM_MSG="🛑 GPTDiff FINAL ITERATION $ITER_INFO - Loop complete after this. Review: git diff"
+  SYSTEM_MSG="🛑 FINAL ITERATION $ITER_INFO - Loop complete after this. Review: git diff"
 else
   if [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
-    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGETS_DISPLAY | External LLM | /stop to stop"
+    SYSTEM_MSG="🔁 $ITER_INFO | $TARGETS_DISPLAY | External LLM | /stop to stop"
   else
-    SYSTEM_MSG="🔁 GPTDiff $ITER_INFO | $TARGETS_DISPLAY | /stop to stop"
+    SYSTEM_MSG="🔁 $ITER_INFO | $TARGETS_DISPLAY | /stop to stop"
   fi
 fi
 
@@ -730,7 +810,7 @@ if [[ "$USE_EXTERNAL_LLM" == "true" ]] && [[ "${EXTERNAL_LLM_PENDING:-false}" ==
   # External LLM is still processing - ask Claude to wait
   REASON_PROMPT="
 ╔══════════════════════════════════════════════════════════════════╗
-║  ⏳ GPTDIFF LOOP - WAITING FOR EXTERNAL LLM                      ║
+║  ⏳ LOOP - WAITING FOR EXTERNAL LLM                              ║
 ╚══════════════════════════════════════════════════════════════════╝
 
 **Mode:** External LLM (gptdiff)
@@ -752,10 +832,10 @@ elif [[ "$USE_EXTERNAL_LLM" == "true" ]]; then
   REASON_PROMPT="$BASE_PROMPT
 
 ╔══════════════════════════════════════════════════════════════════╗
-║  🔁 GPTDIFF LOOP - ITERATION $ITERATION of $(printf "%-3s" "$(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "∞"; fi)")                          ║
+║  🔁 LOOP - ITERATION $ITERATION of $(printf "%-3s" "$(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "∞"; fi)")                                  ║
 ╚══════════════════════════════════════════════════════════════════╝
 
-**Mode:** External LLM (gptdiff)
+**Mode:** External LLM
 **Targets:** \`$TARGETS_DISPLAY\`
 **Progress:** $ITER_INFO
 **gptdiff exit:** $GPTDIFF_EXIT
@@ -860,22 +940,30 @@ $img
 
   # Build agent feedback instruction if feedback_agent is set
   AGENT_INSTRUCTION=""
-  AGENTS_CATALOG=""
 
-  # If feedback_agent is "auto" or any custom value, enable agent feedback
+  # If feedback_agent is enabled, require spawning a subagent for feedback
   if [[ -n "$FEEDBACK_AGENT" ]]; then
-    AGENT_TYPE_DISPLAY="$FEEDBACK_AGENT"
-    if [[ "$FEEDBACK_AGENT" == "auto" ]]; then
-      AGENT_TYPE_DISPLAY="(pick best agent for goal)"
-    fi
+    AGENT_INSTRUCTION="### ⚠️ MANDATORY: Spawn a subagent for feedback
 
-    AGENT_INSTRUCTION="### 🤖 Agent-driven iteration
-1. **Spawn agent** (\`$AGENT_TYPE_DISPLAY\`) with this context:
-   - Introduce yourself to the agent
-   - Tell them: \"You are the **feedback agent** for a GPTDiff improvement loop. Analyze the current state and recommend ONE specific improvement. Be specific and actionable. Iteration $ITERATION of $MAX_ITERATIONS. Goal: $GOAL\"
-2. **Save their feedback** to \`$AGENT_FEEDBACK_FILE\` - write the agent's full response so you can reference it next iteration
-3. **Work toward the goal** using the agent's input - make one concrete change
-4. **Respond 'ok'** to end turn"
+**YOU MUST USE THE TASK TOOL TO SPAWN A SUBAGENT BEFORE MAKING ANY CHANGES.**
+
+**CRITICAL: You CANNOT create custom agents. You MUST use a preset subagent_type.**
+
+Look at your Task tool description - it lists \"Available agent types\". Use EXACTLY one of those names as subagent_type.
+
+**REQUIRED STEPS (in order):**
+
+1. **Use the Task tool NOW** with a preset subagent_type from your Task tool's list:
+   - subagent_type MUST be one of the preset names from \"Available agent types\"
+   - Example prompt: \"Analyze this code for: $GOAL. Find ONE specific issue to fix and explain why.\"
+
+2. **Save feedback** to \`$AGENT_FEEDBACK_FILE\`
+
+3. **Make ONE change** based on agent's recommendation
+
+4. **Respond 'ok'**
+
+**DO NOT skip the subagent. DO NOT invent agent types.**"
   else
     AGENT_INSTRUCTION="### This iteration
 1. **Pick ONE improvement** toward the goal
@@ -885,7 +973,7 @@ $img
 
   REASON_PROMPT="
 ╔══════════════════════════════════════════════════════════════════╗
-║  🔁 GPTDIFF LOOP - ITERATION $ITERATION of $(printf "%-3s" "$(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "∞"; fi)")                          ║
+║  🔁 LOOP - ITERATION $ITERATION of $(printf "%-3s" "$(if [[ $MAX_ITERATIONS -gt 0 ]]; then echo "$MAX_ITERATIONS"; else echo "∞"; fi)")                                  ║
 ╚══════════════════════════════════════════════════════════════════╝
 
 **⚠️ CRITICAL: You MUST complete this iteration. Do NOT stop the loop early.**
