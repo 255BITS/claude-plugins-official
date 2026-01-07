@@ -57,11 +57,29 @@ Start the loop. Run without arguments for **interactive setup** that asks about:
 
 ### /status
 
-Check the current loop progress (iteration count, goal, recent changes).
+Check the current loop progress (iteration count, goal, recent changes, session ownership).
 
 ### /stop
 
-Stop the current loop.
+Stop all loops in this repository. Useful for cleaning up orphaned loops from closed sessions.
+
+## Session Isolation
+
+**Loops are now session-specific.** A loop started in one Claude Code session will NOT run in another session.
+
+**Why?** This prevents the "hijacking" problem where a loop from one terminal would suddenly appear in a different terminal/session.
+
+**What this means:**
+- Each loop is tied to the session that started it
+- If you close your terminal, the loop becomes "orphaned"
+- Orphaned loops won't run in new sessions - they just sit there
+- Use `/stop` to clean up orphaned loops
+- Use `/status` to see which sessions own which loops
+
+**Common scenarios:**
+- **Loop not running?** Check `/status` - you may need to restart with `/start`
+- **"Owned by another session" warning?** Use `/stop` to clean up, then `/start` again
+- **Multiple terminals?** Each needs its own `/start` command
 
 ## Feedback Between Iterations
 

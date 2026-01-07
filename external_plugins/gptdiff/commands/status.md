@@ -33,7 +33,8 @@ find "$ROOT/.claude/start" -name "state.local.md" 2>/dev/null | while read -r st
     AGE=$((NOW - LAST_ACT))
     echo "Last activity: ${AGE}s ago"
     if [[ $AGE -gt 600 ]]; then
-      echo "  WARNING: STALE LOCK - may be claimed by another instance"
+      echo "  NOTE: Loop inactive for >10 min - only owner session can run it"
+      echo "  Use /stop to clean up if orphaned"
     fi
   fi
   # Background job status

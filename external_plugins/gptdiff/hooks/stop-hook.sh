@@ -73,15 +73,16 @@ fi
 
 echo "OUR_SESSION_ID: $OUR_SESSION_ID" >> "$DEBUG_LOG"
 
-# Stale lock timeout: 10 minutes (600 seconds)
-# If a lock hasn't been updated in this time, consider it abandoned
-STALE_LOCK_TIMEOUT=600
+# SESSION ISOLATION: Only the session that started a loop can run it.
+# No stale lock takeover, no orphan claiming - strict ownership.
+# Orphaned loops must be cleaned up explicitly with /stop --cleanup
 
-find_claimable_loop() {
+find_owned_loop() {
   local now
   now=$(date +%s)
 
-  echo "=== find_claimable_loop called ===" >> "$DEBUG_LOG"
+  echo "=== find_owned_loop called ===" >> "$DEBUG_LOG"
+  echo "    Looking for loops owned by: $OUR_SESSION_ID" >> "$DEBUG_LOG"
 
   for state_file in "${STATE_FILES[@]}"; do
     local loop_dir
@@ -101,13 +102,15 @@ find_claimable_loop() {
       echo "  OUR_SESSION_ID: '$OUR_SESSION_ID'" >> "$DEBUG_LOG"
       echo "  match: $(test "$lock_owner" == "$OUR_SESSION_ID" && echo yes || echo no)" >> "$DEBUG_LOG"
 
-      # Check for pending claim token (newly started loop, not yet claimed by stop hook)
+      # Check for pending claim token (newly started loop in THIS session)
       # Pending tokens look like: pending-1234567890-abc123
-      # Only claim if very recent (< 30 seconds) to avoid cross-session races
+      # CRITICAL: Only claim if VERY recent (<10 seconds) to prevent cross-session hijacking
+      # The setup script and stop hook should run in the same session within seconds
       if [[ "$lock_owner" == pending-* ]]; then
         if [[ -f "$last_activity_file" ]]; then
           local pending_age=$((now - $(cat "$last_activity_file" 2>/dev/null || echo 0)))
-          if [[ $pending_age -lt 30 ]]; then
+          # Strict 10-second window to prevent cross-session races
+          if [[ $pending_age -lt 10 ]]; then
             # This is a freshly started loop - claim it with our real session_id
             echo "  -> CLAIMING (pending claim token ${pending_age}s old, upgrading to session_id)" >> "$DEBUG_LOG"
             echo "$OUR_SESSION_ID" > "$lock_owner_file"
@@ -115,90 +118,65 @@ find_claimable_loop() {
             echo "$state_file"
             return 0
           else
-            echo "  -> SKIP (pending token too old: ${pending_age}s, may belong to another session)" >> "$DEBUG_LOG"
+            # Pending token too old - likely belongs to another session that didn't complete setup
+            echo "  -> SKIP (pending token ${pending_age}s old - may belong to another session)" >> "$DEBUG_LOG"
+            echo "⚠️  Loop $(basename "$loop_dir") has unclaimed pending token (${pending_age}s old)" >&2
+            echo "   This may be an orphaned loop. Clean up with: /stop --cleanup" >&2
             continue
           fi
         else
-          # No activity file - claim it
-          echo "  -> CLAIMING (pending claim token, no activity file)" >> "$DEBUG_LOG"
-          echo "$OUR_SESSION_ID" > "$lock_owner_file"
-          echo "$now" > "$last_activity_file"
-          echo "$state_file"
-          return 0
-        fi
-      fi
-
-      # If we own this lock, verify the loop is actually active
-      # (last-activity must be recent - this prevents stale session files from matching)
-      if [[ "$lock_owner" == "$OUR_SESSION_ID" ]]; then
-        if [[ -f "$last_activity_file" ]]; then
-          local last_activity
-          last_activity="$(cat "$last_activity_file" 2>/dev/null || echo 0)"
-          local activity_age=$((now - last_activity))
-          echo "  last_activity age: ${activity_age}s" >> "$DEBUG_LOG"
-
-          # If last activity was more than 15 minutes ago, this might be a stale session file
-          # matching an old loop. Require the user to explicitly restart.
-          if [[ $activity_age -gt 900 ]]; then
-            echo "  -> SKIP (session ID matches but loop inactive for ${activity_age}s)" >> "$DEBUG_LOG"
-            echo "⚠️  Loop $(basename "$loop_dir") has matching session but was inactive for ${activity_age}s" >&2
-            echo "   The previous Claude session may have ended. Use /gptdiff:start to restart." >&2
-            continue
-          fi
-        fi
-        echo "  -> CLAIMING (owner match, loop active)" >> "$DEBUG_LOG"
-        echo "$state_file"
-        return 0
-      fi
-
-      # Check if the lock is stale
-      if [[ -f "$last_activity_file" ]]; then
-        local last_activity
-        last_activity="$(cat "$last_activity_file" 2>/dev/null || echo 0)"
-        local age=$((now - last_activity))
-
-        if [[ $age -gt $STALE_LOCK_TIMEOUT ]]; then
-          # Stale lock - break it and claim this loop
-          echo "⚠️  Breaking stale lock on loop $(basename "$loop_dir") (inactive for ${age}s)" >&2
-          echo "$OUR_SESSION_ID" > "$lock_owner_file"
-          echo "$now" > "$last_activity_file"
-          echo "$state_file"
-          return 0
-        else
-          # Lock is held by another active instance - skip this loop
-          echo "ℹ️  Loop $(basename "$loop_dir") is owned by another instance (last active ${age}s ago)" >&2
+          # No activity file with pending token - suspicious, don't claim
+          echo "  -> SKIP (pending token but no activity file - suspicious)" >> "$DEBUG_LOG"
           continue
         fi
-      else
-        # No activity file but lock exists - treat as new, claim it
-        echo "$OUR_SESSION_ID" > "$lock_owner_file"
+      fi
+
+      # STRICT OWNERSHIP: Only run if we own this loop
+      if [[ "$lock_owner" == "$OUR_SESSION_ID" ]]; then
+        echo "  -> FOUND (we own this loop)" >> "$DEBUG_LOG"
+        # Update activity timestamp
         echo "$now" > "$last_activity_file"
         echo "$state_file"
         return 0
       fi
+
+      # We don't own this loop - report it but DON'T claim it
+      local age="unknown"
+      if [[ -f "$last_activity_file" ]]; then
+        local last_activity
+        last_activity="$(cat "$last_activity_file" 2>/dev/null || echo 0)"
+        age=$((now - last_activity))
+      fi
+      echo "  -> SKIP (owned by different session, last active ${age}s ago)" >> "$DEBUG_LOG"
+      # Only warn once per loop (check if we've already warned)
+      local warn_file="$loop_dir/.warned-$OUR_SESSION_ID"
+      if [[ ! -f "$warn_file" ]]; then
+        echo "ℹ️  Loop $(basename "$loop_dir") is owned by another Claude session" >&2
+        echo "   Owner: ${lock_owner:0:30}..." >&2
+        echo "   Last active: ${age}s ago" >&2
+        echo "   This loop will NOT run in your session." >&2
+        touch "$warn_file"
+      fi
+      continue
     else
-      # No lock owner file - orphan loop, claim it
-      echo "  -> CLAIMING (no lock file, orphan loop)" >> "$DEBUG_LOG"
-      echo "$OUR_SESSION_ID" > "$lock_owner_file"
-      echo "$now" > "$last_activity_file"
-      echo "$state_file"
-      return 0
+      # No lock owner file - orphan loop, DON'T claim it
+      echo "  -> SKIP (no lock file - orphan loop, not claiming)" >> "$DEBUG_LOG"
+      echo "⚠️  Found orphaned loop: $(basename "$loop_dir")" >&2
+      echo "   Clean up with: /stop --cleanup" >&2
+      continue
     fi
   done
 
-  # No claimable loops found
-  echo "=== No claimable loops found ===" >> "$DEBUG_LOG"
+  # No owned loops found
+  echo "=== No owned loops found ===" >> "$DEBUG_LOG"
   return 1
 }
 
-# Find a loop we can claim
+# Find a loop owned by THIS session
 STATE_FILE=""
-if ! STATE_FILE="$(find_claimable_loop)"; then
-  # All loops are owned by other instances
-  if [[ ${#STATE_FILES[@]} -gt 0 ]]; then
-    echo "ℹ️  All ${#STATE_FILES[@]} loop(s) are owned by other Claude instances." >&2
-    echo "   Use /gptdiff:stop to force-cancel all loops, or wait for them to complete." >&2
-  fi
+if ! STATE_FILE="$(find_owned_loop)"; then
+  # No loops owned by this session - allow normal stop
+  # (Any warnings about other sessions' loops were already printed by find_owned_loop)
   exit 0
 fi
 
