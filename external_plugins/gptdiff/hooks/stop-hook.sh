@@ -947,15 +947,16 @@ $img
 
 **YOU MUST USE THE TASK TOOL TO SPAWN A SUBAGENT BEFORE MAKING ANY CHANGES.**
 
-**CRITICAL: You CANNOT create custom agents. You MUST use a preset subagent_type.**
-
-Look at your Task tool description - it lists \"Available agent types\". Use EXACTLY one of those names as subagent_type.
+**AGENT SELECTION - Favor specific agents over generic ones:**
+- Review your Task tool's \"Available agent types\" list
+- **PREFER domain-specific agents** that match the goal (e.g., writer, editor, designer, strategist, product manager)
+- **AVOID generic agents** like \"general-purpose\" or \"Explore\" unless no specific agent fits
+- Match the goal keywords to agent specialties (e.g., \"docs\" → writer/editor, \"UI\" → designer, \"strategy\" → strategist)
 
 **REQUIRED STEPS (in order):**
 
-1. **Use the Task tool NOW** with a preset subagent_type from your Task tool's list:
-   - subagent_type MUST be one of the preset names from \"Available agent types\"
-   - Example prompt: \"Analyze this code for: $GOAL. Find ONE specific issue to fix and explain why.\"
+1. **Use the Task tool NOW** with the most relevant specialized subagent_type:
+   - Prompt: \"Review this for: $GOAL. Find ONE specific improvement and explain why it matters.\"
 
 2. **Save feedback** to \`$AGENT_FEEDBACK_FILE\`
 
