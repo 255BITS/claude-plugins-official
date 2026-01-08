@@ -24,11 +24,11 @@ The user provided a goal directly. **YOU MUST spawn an agent to analyze the proj
 
    Use the Task tool IMMEDIATELY with that agent's name as `subagent_type`.
 
-   Prompt the agent:
-   ```
-   First, introduce yourself - say hi and briefly announce your role/specialty.
+   Introduce yourself to the agent first (say hi, explain you're setting up a gptdiff improvement loop).
 
-   Then analyze this project for the goal: "$ARGUMENTS"
+   Then prompt the agent:
+   ```
+   Analyze this project for the goal: "$ARGUMENTS"
 
    1. Explore the project structure - what kind of project is this?
    2. Identify the domain (game, web app, API, CLI tool, library, etc.)
@@ -65,11 +65,11 @@ Full interactive mode. **YOU MUST spawn an agent to analyze the project.**
 
    Use the Task tool IMMEDIATELY with that agent's name as `subagent_type`.
 
-   Prompt the agent:
-   ```
-   First, introduce yourself - say hi and briefly announce your role/specialty.
+   Introduce yourself to the agent first (say hi, explain you're setting up a gptdiff improvement loop).
 
-   Then analyze this project comprehensively:
+   Then prompt the agent:
+   ```
+   Analyze this project comprehensively:
 
    1. Explore the full project structure
    2. Identify the project domain (game, web app, API, CLI tool, library, etc.)
