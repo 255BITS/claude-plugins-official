@@ -1,4 +1,4 @@
-# GPTDiff Plugin — Agent Loops for Iterative Improvement
+# CEO Plugin — Agent Loops for Iterative Improvement
 
 This plugin runs **iterative improvement loops** using Claude Code — not doing a task once, but doing it *many times* to converge on a better result.
 
@@ -80,7 +80,7 @@ Each loop has its own directory based on target hash, allowing multiple concurre
 
 - Loop state: `.claude/start/<target-slug>/state.local.md`
 - Logs: `.claude/start/<target-slug>/`
-  - `eval.log`, `feedback.log`, `gptdiff.log`
+  - `eval.log`, `feedback.log`, `ceo.log`
   - `diffstat.txt`, `changed-files.txt`
 
 ## Notes
