@@ -1,8 +1,8 @@
 {
-  "name": "ceo",
-  "description": "CEO agent loops for Claude Code: iterate improvements with AI agent feedback each cycle.",
+  "name": "gptdiff",
+  "description": "GPTDiff agent loops for Claude Code: scaffold a focused subdirectory (with .gptignore + interface) and iterate improvements via repeated gptdiff --apply runs.",
   "author": {
-    "name": "255bits",
-    "email": "support@255bits.com"
+    "name": "255labs",
+    "email": "support@255labs.xyz"
   }
 }
